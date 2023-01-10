@@ -3,6 +3,8 @@ defmodule Archethic.Contracts.Interpreter.Library do
 
   alias Archethic.Election
 
+  alias Archethic.TransactionChain.TransactionInput
+
   alias Archethic.P2P
   alias Archethic.P2P.Message.GetFirstAddress
   alias Archethic.P2P.Message.GetFirstPublicKey
@@ -166,6 +168,15 @@ defmodule Archethic.Contracts.Interpreter.Library do
     nodes = Election.chain_storage_nodes(bin_address, P2P.authorized_and_available_nodes())
     {:ok, address} = download_first_address(nodes, bin_address)
     Base.encode16(address)
+  end
+
+  @doc """
+  Get the inputs of the transaction with given hexadecimal address
+  """
+  @spec get_inputs(binary()) :: list(TransactionInput.t())
+  def get_inputs(encoded_address) do
+    address = Base.decode16!(encoded_address, case: :mixed)
+    Archethic.get_transaction_inputs(address)
   end
 
   @doc """
