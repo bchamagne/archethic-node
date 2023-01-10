@@ -171,11 +171,24 @@ defmodule Archethic.Contracts.Interpreter.Library do
   end
 
   @doc """
-  Get the inputs of the transaction with given hexadecimal address
+  Get the inputs of the transaction of given address
+
+  Address can be encoded in hexadecimal or raw (binary)
+  This is useful to be able to do both:
+  - `get_inputs("abcd123...")`
+  - `get_inputs(contract.address)`
   """
   @spec get_inputs(binary()) :: list(TransactionInput.t())
-  def get_inputs(encoded_address) do
-    address = Base.decode16!(encoded_address, case: :mixed)
+  def get_inputs(maybe_encoded_address) do
+    address =
+      case Base.decode16(maybe_encoded_address) do
+        :error ->
+          maybe_encoded_address
+
+        {:ok, address} ->
+          address
+      end
+
     Archethic.get_transaction_inputs(address)
   end
 
