@@ -255,7 +255,7 @@ defmodule Archethic.ReplicationTest do
 
       MockDB
       |> expect(:get_first_chain_address, fn _ -> "@Alice0" end)
-      |> expect(:get_transaction, fn _, _ ->
+      |> expect(:get_transaction, fn _, _, _ ->
         {:ok,
          %Transaction{
            validation_stamp: %ValidationStamp{timestamp: DateTime.utc_now()},
@@ -288,7 +288,7 @@ defmodule Archethic.ReplicationTest do
 
       MockDB
       |> expect(:get_first_chain_address, fn _ -> "@Alice0" end)
-      |> expect(:get_transaction, fn _, _ ->
+      |> expect(:get_transaction, fn _, _, _ ->
         {:ok,
          %Transaction{
            validation_stamp: %ValidationStamp{timestamp: DateTime.utc_now()},
