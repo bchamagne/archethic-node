@@ -5,6 +5,7 @@ defmodule Archethic.Contracts.Interpreter.Library do
 
   alias Archethic.TransactionChain
   alias Archethic.Contracts.ContractConstants
+  alias Archethic.Contracts.Interpreter.Utils
   alias Archethic.Contracts.TransactionLookup
 
   alias Archethic.P2P
@@ -117,7 +118,7 @@ defmodule Archethic.Contracts.Interpreter.Library do
   """
   @spec hash(binary()) :: binary()
   def hash(content) when is_binary(content) do
-    :crypto.hash(:sha256, decode_binary(content)) |> Base.encode16()
+    :crypto.hash(:sha256, Utils.maybe_decode_hex(content)) |> Base.encode16()
   end
 
   @doc """
@@ -155,7 +156,7 @@ defmodule Archethic.Contracts.Interpreter.Library do
       2
   """
   @spec size(binary() | list()) :: non_neg_integer()
-  def size(binary) when is_binary(binary), do: binary |> decode_binary() |> byte_size()
+  def size(binary) when is_binary(binary), do: binary |> Utils.maybe_decode_hex() |> byte_size()
   def size(list) when is_list(list), do: length(list)
   def size(map) when is_map(map), do: map_size(map)
 
@@ -165,7 +166,7 @@ defmodule Archethic.Contracts.Interpreter.Library do
   @spec get_genesis_address(binary()) ::
           binary()
   def get_genesis_address(address) do
-    bin_address = decode_binary(address)
+    bin_address = Utils.maybe_decode_hex(address)
     nodes = Election.chain_storage_nodes(bin_address, P2P.authorized_and_available_nodes())
     {:ok, address} = download_first_address(nodes, bin_address)
     Base.encode16(address)
@@ -178,7 +179,7 @@ defmodule Archethic.Contracts.Interpreter.Library do
   """
   @spec get_calls(binary()) :: list(map())
   def get_calls(contract_address) do
-    contract_address = decode_binary(contract_address)
+    contract_address = Utils.maybe_decode_hex(contract_address)
 
     # TODO: parallelize?
     TransactionLookup.list_contract_transactions(contract_address)
@@ -195,7 +196,7 @@ defmodule Archethic.Contracts.Interpreter.Library do
   """
   @spec get_genesis_public_key(binary()) :: binary()
   def get_genesis_public_key(address) do
-    bin_address = decode_binary(address)
+    bin_address = Utils.maybe_decode_hex(address)
     nodes = Election.chain_storage_nodes(bin_address, P2P.authorized_and_available_nodes())
     {:ok, key} = download_first_public_key(nodes, bin_address)
     Base.encode16(key)
@@ -225,18 +226,4 @@ defmodule Archethic.Contracts.Interpreter.Library do
   """
   @spec timestamp() :: non_neg_integer()
   def timestamp, do: DateTime.utc_now() |> DateTime.to_unix()
-
-  defp decode_binary(bin) do
-    if String.printable?(bin) do
-      case Base.decode16(bin, case: :mixed) do
-        {:ok, hex} ->
-          hex
-
-        _ ->
-          bin
-      end
-    else
-      bin
-    end
-  end
 end
