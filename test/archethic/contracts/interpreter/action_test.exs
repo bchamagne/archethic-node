@@ -343,4 +343,71 @@ defmodule Archethic.Contracts.ActionInterpreterTest do
              |> elem(2)
              |> ActionInterpreter.execute()
   end
+
+  describe "reduce/3" do
+    test "should be able to create list of things" do
+      ~S"""
+      actions triggered_by: transaction do
+        list = [1,2,3]
+        list2 = ["foo", "bar"]
+        list3 = [list, list2]
+        set_content list3
+      end
+      """
+      |> assert_content_after_execute("[[1,2,3],[\"foo\",\"bar\"]]")
+    end
+
+    test "should be able to reduce" do
+      ~S"""
+      actions triggered_by: transaction do
+        list = [1337,2551,563]
+        sum = reduce(list, 49, fn item, acc -> 0 + item + acc end)
+        set_content sum
+      end
+      """
+      |> assert_content_after_execute("4500")
+    end
+
+    test "should be able to filter" do
+      ~S"""
+      actions triggered_by: transaction do
+        list = [1,2,3,4]
+        even_numbers = reduce(list, [], fn number, acc ->
+          if rem(number, 2) == 0 do
+            acc ++ [number]
+          else
+            acc
+          end
+        end)
+
+        set_content even_numbers
+      end
+      """
+      |> assert_content_after_execute("[2,4]")
+    end
+
+    test "should be able to map" do
+      ~S"""
+      actions triggered_by: transaction do
+        list = [1,2,3]
+        double = reduce(list, [], fn number, accu ->
+            accu ++ [number * 2]
+        end)
+
+        set_content double
+      end
+      """
+      |> assert_content_after_execute("[2,4,6]")
+    end
+  end
+
+  defp assert_content_after_execute(code, content) do
+    assert %Transaction{data: %TransactionData{content: ^content}} =
+             code
+             |> Interpreter.sanitize_code()
+             |> elem(1)
+             |> ActionInterpreter.parse()
+             |> elem(2)
+             |> ActionInterpreter.execute()
+  end
 end
