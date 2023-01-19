@@ -142,6 +142,14 @@ defmodule Archethic.Contracts.Interpreter.Library do
   end
 
   @doc """
+  Invokes fun for each element in the enumerable with the accumulator.
+  """
+  @spec reduce(Enumerable.t(), any(), (any(), any() -> any())) :: any()
+  def reduce(list, acc, func) do
+    Enum.reduce(list, acc, func)
+  end
+
+  @doc """
   Determines the size  of the input
 
   ## Examples
@@ -159,6 +167,51 @@ defmodule Archethic.Contracts.Interpreter.Library do
   def size(binary) when is_binary(binary), do: binary |> Utils.maybe_decode_hex() |> byte_size()
   def size(list) when is_list(list), do: length(list)
   def size(map) when is_map(map), do: map_size(map)
+
+  @doc """
+  Append item to the list (slow)
+
+  ## Examples
+    iex> Library.append([], 1)
+    [1]
+
+    iex> Library.append([1], [2])
+    [1, [2]]
+  """
+  @spec append(list(any()), any()) :: list(any())
+  def append(list, item) do
+    list ++ [item]
+  end
+
+  @doc """
+  Prepend item to the list (fast)
+
+  ## Examples
+    iex> Library.prepend([], 1)
+    [1]
+
+    iex> Library.prepend([1], [2])
+    [[2], 1]
+  """
+  @spec prepend(list(any()), any()) :: list(any())
+  def prepend(list, item) do
+    [item | list]
+  end
+
+  @doc """
+  Concat both list
+
+  ## Examples
+  iex> Library.concat([], [])
+  []
+
+  iex> Library.concat([1,2], [3,4])
+  [1,2,3,4]
+  """
+  @spec concat(list(), list()) :: list()
+  def concat(list1, list2) do
+    list1 ++ list2
+  end
 
   @doc """
   Get the genesis address of the chain
