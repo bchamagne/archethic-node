@@ -200,6 +200,38 @@ defmodule Archethic.Contracts.Interpreter.TransactionStatements do
     )
   end
 
+  @doc """
+  Add multiple recipients
+  """
+  @spec add_recipients(Transaction.t(), list(binary())) :: Transaction.t()
+  def add_recipients(tx = %Transaction{}, args) when is_list(args) do
+    Enum.reduce(args, tx, &add_recipient/2)
+  end
+
+  @doc """
+  Add multiple ownerships
+  """
+  @spec add_ownerships(Transaction.t(), list(list())) :: Transaction.t()
+  def add_ownerships(tx = %Transaction{}, args) when is_list(args) do
+    Enum.reduce(args, tx, &add_ownership/2)
+  end
+
+  @doc """
+  Add multiple token transfers
+  """
+  @spec add_token_transfers(Transaction.t(), list(list())) :: Transaction.t()
+  def add_token_transfers(tx = %Transaction{}, args) when is_list(args) do
+    Enum.reduce(args, tx, &add_token_transfer/2)
+  end
+
+  @doc """
+  Add multiple UCO transfers
+  """
+  @spec add_uco_transfers(Transaction.t(), list(list())) :: Transaction.t()
+  def add_uco_transfers(tx = %Transaction{}, args) when is_list(args) do
+    Enum.reduce(args, tx, &add_uco_transfer/2)
+  end
+
   defp decode_binary(bin) do
     if String.match?(bin, ~r/^[[:xdigit:]]+$/) do
       Base.decode16!(bin, case: :mixed)
