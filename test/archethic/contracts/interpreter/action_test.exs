@@ -485,6 +485,21 @@ defmodule Archethic.Contracts.ActionInterpreterTest do
       """
       |> assert_content_after_execute("[2,4,6]")
     end
+
+    test "should be able to use = in a reduce" do
+      ~S"""
+      actions triggered_by: transaction do
+        list = [1,2,3]
+        double = reduce(list, [], fn number, accu ->
+            x = 2
+            append(accu, number * x)
+        end)
+
+        set_content double
+      end
+      """
+      |> assert_content_after_execute("[2,4,6]")
+    end
   end
 
   defp assert_content_after_execute(code, content) do
