@@ -12,6 +12,9 @@ defmodule Archethic.Contracts.ActionInterpreterTest do
   alias Archethic.TransactionChain.TransactionInput
   alias Archethic.TransactionChain.VersionedTransactionInput
   alias Archethic.TransactionChain.TransactionData
+  alias Archethic.TransactionChain.TransactionData.Ledger
+  alias Archethic.TransactionChain.TransactionData.UCOLedger
+  alias Archethic.TransactionChain.TransactionData.UCOLedger.Transfer
 
   alias Archethic.TransactionFactory
 
@@ -430,6 +433,45 @@ defmodule Archethic.Contracts.ActionInterpreterTest do
              })
   end
 
+  describe "blacklist" do
+    test "should parse when arguments are allowed" do
+      assert {:ok, :transaction, _ast} =
+               ~S"""
+               actions triggered_by: transaction do
+                 add_uco_transfer to: "ABC123", amount: 64
+               end
+               """
+               |> Interpreter.sanitize_code()
+               |> elem(1)
+               |> ActionInterpreter.parse()
+    end
+
+    test "should parse when building a keyword list" do
+      assert {:ok, :transaction, _ast} =
+               ~S"""
+               actions triggered_by: transaction do
+                 transfer = [to: "ABC123", amount: 33]
+                 add_uco_transfer transfer
+               end
+               """
+               |> Interpreter.sanitize_code()
+               |> elem(1)
+               |> ActionInterpreter.parse()
+    end
+
+    test "should not parse when arguments are not allowed" do
+      assert {:error, "invalid add_uco_transfer arguments - hello"} =
+               ~S"""
+               actions triggered_by: transaction do
+                 add_uco_transfer to: "abc123", amount: 31, hello: 1
+               end
+               """
+               |> Interpreter.sanitize_code()
+               |> elem(1)
+               |> ActionInterpreter.parse()
+    end
+  end
+
   describe "reduce/3" do
     test "should be able to create list of things" do
       ~S"""
@@ -593,6 +635,40 @@ defmodule Archethic.Contracts.ActionInterpreterTest do
           "address" => "@addr"
         }
       })
+    end
+
+    test "should be able to create keywords in a reduce" do
+      code = ~S"""
+      actions triggered_by: transaction do
+        list = [1,2,3]
+
+        transfers = reduce(list, [], fn amount, acc ->
+          transfer = [to: "ABC123", amount: amount]
+          append(acc, transfer)
+        end)
+        add_uco_transfers transfers
+      end
+      """
+
+      assert %Transaction{
+               data: %TransactionData{
+                 ledger: %Ledger{
+                   uco: %UCOLedger{
+                     transfers: [
+                       %Transfer{amount: 3},
+                       %Transfer{amount: 2},
+                       %Transfer{amount: 1}
+                     ]
+                   }
+                 }
+               }
+             } =
+               code
+               |> Interpreter.sanitize_code()
+               |> elem(1)
+               |> ActionInterpreter.parse()
+               |> elem(2)
+               |> ActionInterpreter.execute()
     end
   end
 
