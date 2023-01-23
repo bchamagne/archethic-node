@@ -224,6 +224,7 @@ defmodule Archethic.Contracts.Interpreter.Library do
   Append item to the list (slow)
 
   ## Examples
+
     iex> Library.append([], 1)
     [1]
 
@@ -236,6 +237,7 @@ defmodule Archethic.Contracts.Interpreter.Library do
   end
 
   @doc """
+
   Prepend item to the list (fast)
 
   ## Examples
@@ -254,15 +256,26 @@ defmodule Archethic.Contracts.Interpreter.Library do
   Concat both list
 
   ## Examples
-  iex> Library.concat([], [])
-  []
 
-  iex> Library.concat([1,2], [3,4])
-  [1,2,3,4]
+    iex> Library.concat([], [])
+    []
+
+    iex> Library.concat("", "")
+    ""
+
+    iex> Library.concat("hello", " world")
+    "hello world"
+
+    iex> Library.concat([1,2], [3,4])
+    [1,2,3,4]
   """
-  @spec concat(list(), list()) :: list()
-  def concat(list1, list2) do
+  @spec concat(list() | String.t(), list() | String.t()) :: list() | String.t()
+  def concat(list1, list2) when is_list(list1) and is_list(list2) do
     list1 ++ list2
+  end
+
+  def concat(str1, str2) when is_binary(str1) and is_binary(str2) do
+    str1 <> str2
   end
 
   @doc """
