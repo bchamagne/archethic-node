@@ -195,7 +195,17 @@ defmodule ArchethicCase do
     start_supervised!(OracleMemTable)
     start_supervised!(TransactionSubscriber)
 
-    :ok
+    on_exit(fn ->
+      Enum.each(Task.Supervisor.children(Archethic.TaskSupervisor), fn pid ->
+        callers = Keyword.get(elem(Process.info(pid, :dictionary), 1), :"$callers")
+
+        Enum.each(callers, fn caller_pid ->
+          unless Process.alive?(caller_pid) do
+            Process.exit(caller_pid, :kill)
+          end
+        end)
+      end)
+    end)
   end
 
   def setup_before_send_tx() do
