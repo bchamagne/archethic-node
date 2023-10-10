@@ -75,7 +75,7 @@ defmodule Archethic.Mining.SmartContractValidation do
         )
 
       case result do
-        %Contract.Result.Success{next_tx: expected_next_tx} ->
+        %Contract.Result.ActionResult.WithNextTransaction{next_tx: expected_next_tx} ->
           {Transaction.same_payload?(
              Contract.remove_seed_ownership(next_tx),
              expected_next_tx

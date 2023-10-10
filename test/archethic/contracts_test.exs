@@ -588,7 +588,7 @@ defmodule Archethic.ContractsTest do
                )
     end
 
-    test "should return Success if the state changed" do
+    test "should return WithNextTransaction if the state changed" do
       code = ~S"""
         @version 1
         actions triggered_by: datetime, at: 0 do
@@ -599,7 +599,7 @@ defmodule Archethic.ContractsTest do
 
       contract_tx = ContractFactory.create_valid_contract_tx(code)
 
-      assert %Contract.Result.Success{} =
+      assert %Contract.Result.ActionResult.WithNextTransaction{} =
                Contracts.execute_trigger(
                  {:datetime, DateTime.from_unix!(0)},
                  Contract.from_transaction!(contract_tx),
@@ -608,7 +608,7 @@ defmodule Archethic.ContractsTest do
                )
     end
 
-    test "should return NoOp if the state did not changed" do
+    test "should return WithoutNextTransaction if the state did not changed" do
       code = ~S"""
         @version 1
         actions triggered_by: datetime, at: 0 do
@@ -620,7 +620,7 @@ defmodule Archethic.ContractsTest do
       contract_tx = ContractFactory.create_valid_contract_tx(code)
       {:ok, state_utxo} = State.to_utxo(%{"key" => "value"})
 
-      assert %Contract.Result.Noop{} =
+      assert %Contract.Result.ActionResult.WithoutNextTransaction{} =
                Contracts.execute_trigger(
                  {:datetime, DateTime.from_unix!(0)},
                  Contract.from_transaction!(contract_tx),
@@ -630,7 +630,7 @@ defmodule Archethic.ContractsTest do
                )
     end
 
-    test "should return NoOp if there is no state" do
+    test "should return WithoutNextTransaction if there is no state" do
       code = ~S"""
         @version 1
         actions triggered_by: datetime, at: 0 do
@@ -642,7 +642,7 @@ defmodule Archethic.ContractsTest do
       contract_tx = ContractFactory.create_valid_contract_tx(code)
       {:ok, state_utxo} = State.to_utxo(%{"key" => "value"})
 
-      assert %Contract.Result.Noop{} =
+      assert %Contract.Result.ActionResult.WithoutNextTransaction{} =
                Contracts.execute_trigger(
                  {:datetime, DateTime.from_unix!(0)},
                  Contract.from_transaction!(contract_tx),
@@ -650,7 +650,7 @@ defmodule Archethic.ContractsTest do
                  nil
                )
 
-      assert %Contract.Result.Noop{} =
+      assert %Contract.Result.ActionResult.WithoutNextTransaction{} =
                Contracts.execute_trigger(
                  {:datetime, DateTime.from_unix!(0)},
                  Contract.from_transaction!(contract_tx),

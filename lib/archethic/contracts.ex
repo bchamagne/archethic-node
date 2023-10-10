@@ -95,7 +95,7 @@ defmodule Archethic.Contracts do
       {:ok, next_tx, next_state, logs} ->
         case State.to_utxo(next_state) do
           {:ok, maybe_utxo} ->
-            %Contract.Result.Success{
+            %Contract.Result.ActionResult.WithNextTransaction{
               logs: logs,
               next_tx: next_tx,
               next_state_utxo: maybe_utxo
@@ -341,7 +341,7 @@ defmodule Archethic.Contracts do
   end
 
   defp execute_trigger_noop_response({:ok, nil}, logs, _input_utxo, _contract_tx) do
-    %Contract.Result.Noop{
+    %Contract.Result.ActionResult.WithoutNextTransaction{
       next_state_utxo: nil,
       logs: logs
     }
@@ -349,14 +349,14 @@ defmodule Archethic.Contracts do
 
   defp execute_trigger_noop_response({:ok, output_utxo}, logs, input_utxo, _contract_tx)
        when input_utxo == output_utxo do
-    %Contract.Result.Noop{
+    %Contract.Result.ActionResult.WithoutNextTransaction{
       next_state_utxo: output_utxo,
       logs: logs
     }
   end
 
   defp execute_trigger_noop_response({:ok, state_utxo}, logs, _input_utxo, contract_tx) do
-    %Contract.Result.Success{
+    %Contract.Result.ActionResult.WithNextTransaction{
       logs: logs,
       next_tx: generate_next_tx(contract_tx),
       next_state_utxo: state_utxo

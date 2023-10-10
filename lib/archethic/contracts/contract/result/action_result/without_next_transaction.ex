@@ -1,7 +1,6 @@
-defmodule Archethic.Contracts.Contract.Result.Noop do
-  @moduledoc """
-  This struct represents a NO-OP, an execution that did not produce a next transaction
-  """
+defmodule Archethic.Contracts.Contract.Result.ActionResult.WithoutNextTransaction do
+  @moduledoc false
+
   alias Archethic.TransactionChain.Transaction.ValidationStamp.LedgerOperations.UnspentOutput
 
   @enforce_keys [:next_state_utxo]

@@ -793,8 +793,14 @@ defmodule Archethic.Mining.ValidationContext do
       validation_time,
       Mining.protocol_version(),
       case maybe_execution_result do
-        %Contract.Result.Success{next_state_utxo: state_utxo} -> state_utxo
-        _ -> nil
+        %Contract.Result.ActionResult.WithNextTransaction{next_state_utxo: state_utxo} ->
+          state_utxo
+
+        %Contract.Result.ActionResult.WithoutNextTransaction{next_state_utxo: state_utxo} ->
+          state_utxo
+
+        _ ->
+          nil
       end
     ) +
       contract_recipients_fee
@@ -841,8 +847,14 @@ defmodule Archethic.Mining.ValidationContext do
       unspent_outputs,
       validation_time |> DateTime.truncate(:millisecond),
       case maybe_execution_result do
-        %Contract.Result.Success{next_state_utxo: state_utxo} -> state_utxo
-        _ -> nil
+        %Contract.Result.ActionResult.WithNextTransaction{next_state_utxo: state_utxo} ->
+          state_utxo
+
+        %Contract.Result.ActionResult.WithoutNextTransaction{next_state_utxo: state_utxo} ->
+          state_utxo
+
+        _ ->
+          nil
       end
     )
   end

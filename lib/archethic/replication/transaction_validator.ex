@@ -396,7 +396,7 @@ defmodule Archethic.Replication.TransactionValidator do
              prev_tx,
              tx
            ) do
-        {true, %Contract.Result.Success{next_state_utxo: state_utxo}} ->
+        {true, %Contract.Result.ActionResult.WithNextTransaction{next_state_utxo: state_utxo}} ->
           state_utxo
 
         _ ->

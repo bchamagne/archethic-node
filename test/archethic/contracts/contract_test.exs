@@ -48,14 +48,14 @@ defmodule Archethic.Contracts.ContractTest do
         |> ContractFactory.create_valid_contract_tx(seed: seed)
         |> Contract.from_transaction!()
 
-      %Contract.Result.Success{next_tx: next_tx} =
-        Contracts.execute_trigger(
-          {:datetime, DateTime.from_unix!(trigger_time)},
-          contract,
-          nil,
-          nil,
-          nil
-        )
+      assert %Contract.Result.ActionResult.WithNextTransaction{next_tx: next_tx} =
+               Contracts.execute_trigger(
+                 {:datetime, DateTime.from_unix!(trigger_time)},
+                 contract,
+                 nil,
+                 nil,
+                 nil
+               )
 
       assert {:ok,
               signed_tx = %Transaction{previous_public_key: ^pub, previous_signature: signature}} =
@@ -85,7 +85,7 @@ defmodule Archethic.Contracts.ContractTest do
 
       storage_nonce_public_key = Crypto.storage_nonce_public_key()
 
-      assert %Contract.Result.Success{next_tx: next_tx} =
+      assert %Contract.Result.ActionResult.WithNextTransaction{next_tx: next_tx} =
                Contracts.execute_trigger(
                  {:datetime, DateTime.from_unix!(trigger_time)},
                  contract,

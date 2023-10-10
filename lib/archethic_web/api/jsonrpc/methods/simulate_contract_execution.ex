@@ -107,10 +107,10 @@ defmodule ArchethicWeb.API.JsonRPC.Method.SimulateContractExecution do
 
   def validate_and_execute_trigger(trigger, contract, trigger_tx, recipient, maybe_state_utxo) do
     case Contracts.execute_trigger(trigger, contract, trigger_tx, recipient, maybe_state_utxo) do
-      %Contract.Result.Success{next_tx: next_tx} ->
+      %Contract.Result.ActionResult.WithNextTransaction{next_tx: next_tx} ->
         {:ok, next_tx}
 
-      %Contract.Result.Noop{} ->
+      %Contract.Result.ActionResult.WithoutNextTransaction{} ->
         {:error,
          {:execute_error,
           "Execution success, but the contract did not produce a next transaction"}}

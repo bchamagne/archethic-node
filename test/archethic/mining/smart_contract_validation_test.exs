@@ -244,7 +244,7 @@ defmodule Archethic.Mining.SmartContractValidationTest do
         timestamp: now
       }
 
-      assert {true, %Contract.Result.Success{}} =
+      assert {true, %Contract.Result.ActionResult.WithNextTransaction{}} =
                SmartContractValidation.valid_contract_execution?(
                  contract_context,
                  prev_tx,
@@ -271,7 +271,7 @@ defmodule Archethic.Mining.SmartContractValidationTest do
         timestamp: now
       }
 
-      assert {true, %Contract.Result.Success{}} =
+      assert {true, %Contract.Result.ActionResult.WithNextTransaction{}} =
                SmartContractValidation.valid_contract_execution?(
                  contract_context,
                  prev_tx,
@@ -332,7 +332,7 @@ defmodule Archethic.Mining.SmartContractValidationTest do
         timestamp: now
       }
 
-      assert {true, %Contract.Result.Success{}} =
+      assert {true, %Contract.Result.ActionResult.WithNextTransaction{}} =
                SmartContractValidation.valid_contract_execution?(
                  contract_context,
                  prev_tx,
@@ -388,7 +388,7 @@ defmodule Archethic.Mining.SmartContractValidationTest do
         timestamp: now
       }
 
-      assert {true, %Contract.Result.Success{}} =
+      assert {true, %Contract.Result.ActionResult.WithNextTransaction{}} =
                SmartContractValidation.valid_contract_execution?(
                  contract_context,
                  prev_tx,
@@ -416,7 +416,7 @@ defmodule Archethic.Mining.SmartContractValidationTest do
         timestamp: now
       }
 
-      assert {false, %Contract.Result.Success{}} =
+      assert {false, %Contract.Result.ActionResult.WithNextTransaction{}} =
                SmartContractValidation.valid_contract_execution?(
                  contract_context,
                  prev_tx,

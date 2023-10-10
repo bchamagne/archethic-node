@@ -96,7 +96,10 @@ defmodule Archethic.P2P.Message.ValidateSmartContractCall do
   end
 
   defp calculate_fee(
-         %Contract.Result.Success{next_tx: next_tx, next_state_utxo: maybe_state_utxo},
+         %Contract.Result.ActionResult.WithNextTransaction{
+           next_tx: next_tx,
+           next_state_utxo: maybe_state_utxo
+         },
          contract = %Contract{transaction: %Transaction{address: contract_address}},
          timestamp
        ) do

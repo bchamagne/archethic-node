@@ -136,7 +136,7 @@ defmodule Archethic.Contracts.Worker do
 
     with true <- has_minimum_fees?(contract_address),
          maybe_state_utxo <- Contracts.State.get_utxo_from_transaction(prev_tx),
-         %Contract.Result.Success{next_tx: next_tx} <-
+         %Contract.Result.ActionResult.WithNextTransaction{next_tx: next_tx} <-
            Contracts.execute_trigger(
              trigger,
              contract,
@@ -151,7 +151,7 @@ defmodule Archethic.Contracts.Worker do
          :ok <- send_transaction(contract_context, next_tx) do
       Logger.debug("Contract execution success", meta)
     else
-      %Contract.Result.Noop{} ->
+      %Contract.Result.ActionResult.WithoutNextTransaction{} ->
         Logger.debug("Contract execution success but there is no new transaction", meta)
 
       %Contract.Result.Error{user_friendly_error: reason} ->
