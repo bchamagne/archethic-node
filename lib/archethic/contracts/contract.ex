@@ -3,8 +3,8 @@ defmodule Archethic.Contracts.Contract do
   Represents a smart contract
   """
 
-  alias Archethic.Contracts.ContractConditions, as: Conditions
-  alias Archethic.Contracts.ContractConditions.Subjects, as: ConditionsSubjects
+  alias Archethic.Contracts.Conditions
+  alias Archethic.Contracts.Conditions.Subjects, as: ConditionsSubjects
 
   alias Archethic.Contracts.Interpreter
 

@@ -5,8 +5,8 @@ defmodule Archethic.Contracts.InterpreterTest do
 
   alias Archethic.Contracts.State
   alias Archethic.Contracts.Contract
-  alias Archethic.Contracts.ContractConstants, as: Constants
-  alias Archethic.Contracts.ContractConditions, as: Conditions
+  alias Archethic.Contracts.Constants
+  alias Archethic.Contracts.Conditions
   alias Archethic.Contracts.Interpreter
   alias Archethic.ContractFactory
 

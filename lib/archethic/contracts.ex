@@ -5,8 +5,8 @@ defmodule Archethic.Contracts do
   """
 
   alias __MODULE__.Contract
-  alias __MODULE__.ContractConditions, as: Conditions
-  alias __MODULE__.ContractConstants, as: Constants
+  alias __MODULE__.Conditions
+  alias __MODULE__.Constants
   alias __MODULE__.Interpreter
   alias __MODULE__.Loader
   alias __MODULE__.TransactionLookup

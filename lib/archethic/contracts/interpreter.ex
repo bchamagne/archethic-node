@@ -14,8 +14,8 @@ defmodule Archethic.Contracts.Interpreter do
 
   alias Archethic.Contracts.State
   alias Archethic.Contracts.Contract
-  alias Archethic.Contracts.ContractConditions.Subjects, as: ConditionsSubjects
-  alias Archethic.Contracts.ContractConstants, as: Constants
+  alias Archethic.Contracts.Conditions.Subjects, as: ConditionsSubjects
+  alias Archethic.Contracts.Constants
 
   alias Archethic.TransactionChain.Transaction
   alias Archethic.TransactionChain.Transaction.ValidationStamp
