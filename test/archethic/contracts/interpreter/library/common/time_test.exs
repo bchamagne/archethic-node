@@ -74,13 +74,14 @@ defmodule Archethic.Contracts.Interpreter.Library.Common.TimeTest do
           timestamp: datetime
         )
 
-      assert Contracts.valid_condition?(
-               {:transaction, nil, nil},
-               Contract.from_transaction!(contract_tx),
-               trigger_tx,
-               nil,
-               datetime
-             )
+      assert %Contract.Result.ConditionResult.Accepted{} =
+               Contracts.execute_condition(
+                 {:transaction, nil, nil},
+                 Contract.from_transaction!(contract_tx),
+                 trigger_tx,
+                 nil,
+                 datetime
+               )
     end
 
     test "should fail the contract if condition is falsy" do
@@ -111,13 +112,14 @@ defmodule Archethic.Contracts.Interpreter.Library.Common.TimeTest do
           timestamp: datetime
         )
 
-      refute Contracts.valid_condition?(
-               {:transaction, nil, nil},
-               Contract.from_transaction!(contract_tx),
-               trigger_tx,
-               nil,
-               datetime
-             )
+      assert %Contract.Result.ConditionResult.Rejected{} =
+               Contracts.execute_condition(
+                 {:transaction, nil, nil},
+                 Contract.from_transaction!(contract_tx),
+                 trigger_tx,
+                 nil,
+                 datetime
+               )
     end
 
     test "should run the contract if condition inherit is truthy" do
@@ -145,13 +147,14 @@ defmodule Archethic.Contracts.Interpreter.Library.Common.TimeTest do
           timestamp: datetime
         )
 
-      assert Contracts.valid_condition?(
-               :inherit,
-               Contract.from_transaction!(contract_tx),
-               next_tx,
-               nil,
-               datetime
-             )
+      assert %Contract.Result.ConditionResult.Accepted{} =
+               Contracts.execute_condition(
+                 :inherit,
+                 Contract.from_transaction!(contract_tx),
+                 next_tx,
+                 nil,
+                 datetime
+               )
     end
 
     test "should fail the contract if condition inherit is falsy" do
@@ -175,13 +178,14 @@ defmodule Archethic.Contracts.Interpreter.Library.Common.TimeTest do
       next_tx =
         ContractFactory.create_next_contract_tx(contract_tx, content: "ciao", timestamp: datetime)
 
-      refute Contracts.valid_condition?(
-               :inherit,
-               Contract.from_transaction!(contract_tx),
-               next_tx,
-               nil,
-               datetime
-             )
+      assert %Contract.Result.ConditionResult.Rejected{} =
+               Contracts.execute_condition(
+                 :inherit,
+                 Contract.from_transaction!(contract_tx),
+                 next_tx,
+                 nil,
+                 datetime
+               )
     end
   end
 end

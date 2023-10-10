@@ -76,16 +76,19 @@ defmodule Archethic.Replication.TransactionValidator do
          next_tx = %Transaction{validation_stamp: %ValidationStamp{timestamp: validation_time}}
        )
        when code != "" do
-    if Contracts.valid_condition?(
-         :inherit,
-         Contract.from_transaction!(prev_tx),
-         next_tx,
-         nil,
-         validation_time
-       ) do
-      :ok
-    else
-      {:error, :invalid_contract_acceptance}
+    case Contracts.execute_condition(
+           :inherit,
+           Contract.from_transaction!(prev_tx),
+           next_tx,
+           nil,
+           validation_time
+         ) do
+      %Contract.Result.ConditionResult.Accepted{} ->
+        :ok
+
+      _ ->
+        # TODO: propagate error, or subject
+        {:error, :invalid_contract_acceptance}
     end
   end
 

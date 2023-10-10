@@ -1058,11 +1058,12 @@ defmodule Archethic.Contracts.InterpreterTest do
         }
       }
 
-      assert Interpreter.valid_conditions?(
-               1,
-               subjects,
-               constants
-             )
+      assert {:ok, _logs} =
+               Interpreter.execute_condition(
+                 1,
+                 subjects,
+                 constants
+               )
     end
 
     test "should be able to read the contract state from a private function block" do

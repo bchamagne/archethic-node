@@ -209,15 +209,14 @@ defmodule Archethic.Contracts do
   Validate any kind of condition.
   The transaction and datetime depends on the condition.
   """
-  @spec valid_condition?(
+  @spec execute_condition(
           Contract.condition_type(),
           Contract.t(),
           Transaction.t(),
           nil | Recipient.t(),
           DateTime.t()
-        ) :: boolean()
-
-  def valid_condition?(
+        ) :: Contract.Result.t()
+  def execute_condition(
         condition_key,
         contract = %Contract{version: version, conditions: conditions},
         transaction = %Transaction{},
@@ -227,7 +226,18 @@ defmodule Archethic.Contracts do
     case Map.get(conditions, condition_key) do
       nil ->
         # only inherit condition are optional
-        condition_key == :inherit
+        if condition_key == :inherit do
+          %Contract.Result.ConditionResult.Accepted{
+            logs: []
+          }
+        else
+          %Contract.Result.Error{
+            error: "Missing condition",
+            user_friendly_error: "Missing condition",
+            logs: [],
+            stacktrace: []
+          }
+        end
 
       %Conditions{args: args, subjects: subjects} ->
         named_action_constants = Interpreter.get_named_action_constants(args, maybe_recipient)
@@ -235,15 +245,33 @@ defmodule Archethic.Contracts do
         condition_constants =
           get_condition_constants(condition_key, contract, transaction, datetime)
 
-        Interpreter.valid_conditions?(
-          version,
-          subjects,
-          Map.merge(named_action_constants, condition_constants)
-        )
+        case Interpreter.execute_condition(
+               version,
+               subjects,
+               Map.merge(named_action_constants, condition_constants)
+             ) do
+          {:ok, logs} ->
+            %Contract.Result.ConditionResult.Accepted{
+              logs: logs
+            }
+
+          {:error, subject, logs} ->
+            %Contract.Result.ConditionResult.Rejected{
+              subject: subject,
+              logs: logs
+            }
+        end
     end
   rescue
-    _ ->
-      false
+    err ->
+      stacktrace = __STACKTRACE__
+
+      %Contract.Result.Error{
+        error: err,
+        user_friendly_error: append_line_to_error(err, stacktrace),
+        logs: [],
+        stacktrace: stacktrace
+      }
   end
 
   @doc """

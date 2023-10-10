@@ -79,8 +79,8 @@ defmodule Archethic.P2P.Message.ValidateSmartContractCall do
          {:ok, contract} <- Contracts.from_transaction(contract_tx),
          trigger when not is_nil(trigger) <- Contract.get_trigger_for_recipient(recipient),
          maybe_state_utxo <- Contracts.State.get_utxo_from_transaction(contract_tx),
-         true <-
-           Contracts.valid_condition?(trigger, contract, transaction, recipient, datetime),
+         %Contract.Result.ConditionResult.Accepted{} <-
+           Contracts.execute_condition(trigger, contract, transaction, recipient, datetime),
          execution_result <-
            Contracts.execute_trigger(trigger, contract, transaction, recipient, maybe_state_utxo,
              time_now: datetime
