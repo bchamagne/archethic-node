@@ -705,7 +705,7 @@ defmodule Archethic.ContractsTest do
           end
         )
 
-      assert {:error, :timeout} =
+      assert %Contract.Result.Error{user_friendly_error: "Function timed-out"} =
                Contracts.execute_function(contract_with_sleep, "meaning_of_life", [], nil)
     end
 
@@ -737,7 +737,7 @@ defmodule Archethic.ContractsTest do
 
       maybe_state_utxo = State.get_utxo_from_transaction(contract_tx)
 
-      assert {:ok, 42} =
+      assert %Contract.Result.PublicFunctionResult.Value{value: 42} =
                Contracts.execute_function(
                  contract,
                  "meaning_of_life",

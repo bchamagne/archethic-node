@@ -4,6 +4,7 @@ defmodule Archethic.Contracts.Interpreter.Library.Common.ContractImpl do
   """
 
   alias Archethic.Contracts
+  alias Archethic.Contracts.Contract
   alias Archethic.Contracts.Interpreter.Legacy.UtilsInterpreter
   alias Archethic.Contracts.Interpreter.Library
 
@@ -29,11 +30,19 @@ defmodule Archethic.Contracts.Interpreter.Library.Common.ContractImpl do
     with {:ok, tx} <- Archethic.get_last_transaction(address),
          maybe_state_utxo <- Contracts.State.get_utxo_from_transaction(tx),
          {:ok, contract} <- Contracts.from_transaction(tx),
-         {:ok, result} <- Contracts.execute_function(contract, function, args, maybe_state_utxo) do
-      result
+         %Contract.Result.PublicFunctionResult.Value{value: value} <-
+           Contracts.execute_function(contract, function, args, maybe_state_utxo) do
+      value
     else
-      {:error, reason} ->
-        raise(Library.Error, message: "Contract.call_function failed with #{inspect(reason)}")
+      err -> raise Library.Error, message: error_to_message(err)
     end
+  end
+
+  defp error_to_message(%Contract.Result.Error{user_friendly_error: reason}) do
+    "Contract.call_function failed with #{reason}"
+  end
+
+  defp error_to_message({:error, reason}) do
+    "Contract.call_function failed with #{inspect(reason)}"
   end
 end
