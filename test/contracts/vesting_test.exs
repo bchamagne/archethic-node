@@ -287,6 +287,67 @@ defmodule VestingTest do
     end
   end
 
+  property "deposit/1 should keep track of multiple deposits per user", %{
+    contract: contract
+  } do
+    check all(
+            seed <- StreamData.binary(length: 10),
+            amounts_levels <-
+              StreamData.list_of(
+                StreamData.tuple({amount_generator(), level_generator()}),
+                min_length: 2,
+                max_length: 10
+              )
+          ) do
+      db =
+        amounts_levels
+        |> Enum.with_index()
+        |> Enum.map(fn {{amount, level}, i} ->
+          timestamp = @start_date |> DateTime.add(i + 1, :minute)
+
+          {amount,
+           Trigger.new(seed)
+           |> Trigger.named_action("deposit", %{"level" => Integer.to_string(level)})
+           |> Trigger.timestamp(timestamp)
+           |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, amount)}
+        end)
+
+      state = %{}
+      triggers = Enum.map(db, &elem(&1, 1))
+      triggers_count = length(triggers)
+
+      MockChain
+      |> expect(:get_genesis_address, triggers_count, fn
+        previous_address ->
+          trigger =
+            Enum.find(
+              triggers,
+              &(Trigger.get_previous_address(&1) == previous_address)
+            )
+
+          trigger["genesis_address"]
+      end)
+
+      assert %{state: next_state} =
+               Enum.reduce(
+                 triggers,
+                 prepare_contract(contract, state, @initial_balance),
+                 &trigger_contract(&2, &1)
+               )
+
+      for {amount, trigger} <- db do
+        user_deposits = next_state["deposits"][trigger["genesis_address"]]
+
+        refute user_deposits
+               |> Enum.find(&Decimal.eq?(&1["amount"], amount))
+               |> is_nil()
+      end
+
+      expected_lp_tokens = Enum.reduce(db, Decimal.new(0), &Decimal.add(elem(&1, 0), &2))
+      assert Decimal.eq?(next_state["lp_token_deposited"], expected_lp_tokens)
+    end
+  end
+
   property "rewards_reserved is the sum of the deposits rewards amount", %{
     contract: contract
   } do
