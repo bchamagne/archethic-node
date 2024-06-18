@@ -49,7 +49,10 @@ defmodule InterpreterCase do
     end
   end
 
-  def trigger_contract(contract, trigger, opts \\ []) do
+  def trigger_contract(_, _, opts \\ [])
+  def trigger_contract({:throw, code}, _, _), do: {:throw, code}
+
+  def trigger_contract(contract, trigger, opts) do
     unless Map.has_key?(trigger, "__trigger"), do: throw("missing action to call")
 
     {{action_name, action_args}, trigger_constants} = Map.pop(trigger, "__trigger")
