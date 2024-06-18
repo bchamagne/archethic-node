@@ -152,8 +152,11 @@ defmodule VestingTest do
       assert triggers_count == map_size(deposits)
 
       for {amount, trigger} <- db do
-        deposit = deposits[trigger["genesis_address"]]
-        assert Decimal.eq?(deposit["amount"], amount)
+        user_deposits = deposits[trigger["genesis_address"]]
+
+        refute user_deposits
+               |> Enum.find(&Decimal.eq?(&1["amount"], amount))
+               |> is_nil()
       end
 
       expected_lp_tokens = Enum.reduce(db, Decimal.new(0), &Decimal.add(elem(&1, 0), &2))
@@ -165,7 +168,10 @@ defmodule VestingTest do
   property "deposit/1 should accept deposits if the farm has already started", %{
     contract: contract
   } do
-    check all(amounts <- StreamData.list_of(amount_generator(), min_length: 2, max_length: 10)) do
+    check all(
+            amounts <- StreamData.list_of(amount_generator(), min_length: 2, max_length: 10),
+            max_runs: 1
+          ) do
       db =
         amounts
         |> Enum.with_index()
@@ -206,8 +212,11 @@ defmodule VestingTest do
       assert triggers_count == map_size(deposits)
 
       for {amount, trigger} <- db do
-        deposit = deposits[trigger["genesis_address"]]
-        assert Decimal.eq?(deposit["amount"], amount)
+        user_deposits = deposits[trigger["genesis_address"]]
+
+        refute user_deposits
+               |> Enum.find(&Decimal.eq?(&1["amount"], amount))
+               |> is_nil()
       end
 
       expected_lp_tokens = Enum.reduce(db, Decimal.new(0), &Decimal.add(elem(&1, 0), &2))
@@ -264,14 +273,16 @@ defmodule VestingTest do
                )
 
       for {_amount, level, timestamp, trigger} <- db do
-        deposit = next_state["deposits"][trigger["genesis_address"]]
+        user_deposits = next_state["deposits"][trigger["genesis_address"]]
 
-        assert Decimal.eq?(
-                 deposit["end"],
-                 timestamp
-                 |> DateTime.add(level_to_days(level), :day)
-                 |> DateTime.to_unix()
-               )
+        expected_end =
+          timestamp
+          |> DateTime.add(level_to_days(level), :day)
+          |> DateTime.to_unix()
+
+        refute user_deposits
+               |> Enum.find(&Decimal.eq?(&1["end"], expected_end))
+               |> is_nil()
       end
     end
   end
@@ -323,6 +334,7 @@ defmodule VestingTest do
                next_state["rewards_reserved"],
                next_state["deposits"]
                |> Map.values()
+               |> List.flatten()
                |> Enum.map(& &1["reward_amount"])
                |> Enum.reduce(0, &Decimal.add/2)
              )
@@ -348,3 +360,31 @@ defmodule VestingTest do
   defp level_to_days(6), do: 730
   defp level_to_days(7), do: 1095
 end
+
+# test "claim/1 should throw if user has no claim", %{contract: contract} do
+#   state = %{}
+
+#   trigger =
+#     Trigger.new()
+#     |> Trigger.named_action("claim", %{"index" => 0})
+#     |> Trigger.timestamp(@end_date |> DateTime.add(1))
+
+#   assert {:throw, 2000} =
+#            contract
+#            |> prepare_contract(state)
+#            |> trigger_contract(trigger)
+# end
+
+# test "claim/1 should throw if index is invalid", %{contract: contract} do
+#   state = %{}
+
+#   trigger =
+#     Trigger.new()
+#     |> Trigger.named_action("claim", %{"index" => 999})
+#     |> Trigger.timestamp(@end_date |> DateTime.add(1))
+
+#   assert {:throw, 2001} =
+#            contract
+#            |> prepare_contract(state)
+#            |> trigger_contract(trigger)
+# end

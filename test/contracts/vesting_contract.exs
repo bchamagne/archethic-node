@@ -33,10 +33,11 @@ actions triggered_by: transaction, on: deposit(level) do
     deposits = State.get("deposits", Map.new())
   end
 
-  user_deposit = Map.get(deposits, user_genesis_address, amount: 0, reward_amount: 0)
-  user_deposit = Map.set(user_deposit, "amount", user_deposit.amount + transfer_amount)
-  user_deposit = Map.set(user_deposit, "end", determine_end(level))
-  deposits = Map.set(deposits, user_genesis_address, user_deposit)
+  current_deposit = [amount: transfer_amount, reward_amount: 0, end: determine_end(level)]
+
+  user_deposits = Map.get(deposits, user_genesis_address, [])
+  user_deposits = List.append(user_deposits, current_deposit)
+  deposits = Map.set(deposits, user_genesis_address, user_deposits)
 
   State.set("deposits", deposits)
 
@@ -46,7 +47,7 @@ end
 
 condition(
   triggered_by: transaction,
-  on: claim(),
+  on: claim(deposit_index),
   as: [
     timestamp: transaction.timestamp > @START_DATE,
     previous_public_key:
@@ -67,7 +68,7 @@ condition(
   ]
 )
 
-actions triggered_by: transaction, on: claim() do
+actions triggered_by: transaction, on: claim(deposit_index) do
   previous_address = Chain.get_previous_address(transaction)
   user_genesis_address = Chain.get_genesis_address(previous_address)
 
@@ -317,16 +318,22 @@ fun calculate_new_rewards() do
 
     if amount_to_allocate > 0 do
       for address in Map.keys(deposits) do
-        deposit = Map.get(deposits, address)
-        new_reward_amount = amount_to_allocate * (deposit.amount / lp_token_deposited)
+        user_deposits = Map.get(deposits, address)
+        user_deposits_updated = []
 
-        if new_reward_amount > 0 do
-          deposit = Map.set(deposit, "reward_amount", deposit.reward_amount + new_reward_amount)
-          deposits = Map.set(deposits, address, deposit)
+        for deposit in user_deposits do
+          new_reward_amount = amount_to_allocate * (deposit.amount / lp_token_deposited)
 
-          rewards_reserved = rewards_reserved + new_reward_amount
-          last_calculation_timestamp = now
+          if new_reward_amount > 0 do
+            deposit = Map.set(deposit, "reward_amount", deposit.reward_amount + new_reward_amount)
+            rewards_reserved = rewards_reserved + new_reward_amount
+            last_calculation_timestamp = now
+          end
+
+          user_deposits_updated = List.append(user_deposits_updated, deposit)
         end
+
+        deposits = Map.set(deposits, address, user_deposits_updated)
       end
     end
   end
