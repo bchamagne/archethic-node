@@ -45,28 +45,36 @@ actions triggered_by: transaction, on: deposit(level) do
   State.set("lp_token_deposited", lp_token_deposited + transfer_amount)
 end
 
-condition(
-  triggered_by: transaction,
-  on: claim(deposit_index),
-  as: [
-    timestamp: transaction.timestamp > @START_DATE,
-    previous_public_key:
-      (
-        previous_address = Chain.get_previous_address()
-        genesis_address = Chain.get_genesis_address(previous_address)
+condition triggered_by: transaction, on: claim(deposit_index) do
+  if transaction.timestamp <= @START_DATE do
+    throw(message: "claim impossible if farm has no started", code: 2000)
+  end
 
-        deposits = State.get("deposits", Map.new())
+  previous_address = Chain.get_previous_address(transaction)
+  genesis_address = Chain.get_genesis_address(previous_address)
 
-        if Map.get(deposits, genesis_address) != nil do
-          res = calculate_new_rewards()
-          user_deposit = Map.get(res.deposits, user_genesis_address)
-          user_deposit.reward_amount > 0
-        else
-          false
-        end
-      )
-  ]
-)
+  deposits = State.get("deposits", Map.new())
+  user_deposits = Map.get(deposits, genesis_address, [])
+  user_deposits_size = List.size(user_deposits)
+
+  if user_deposits_size == 0 do
+    throw(message: "user has no claim", code: 2001)
+  end
+
+  if user_deposits_size < deposit_index + 1 do
+    throw(message: "invalid index", code: 2002)
+  end
+
+  res = calculate_new_rewards()
+  user_deposits = Map.get(res.deposits, genesis_address)
+  user_deposit = List.at(user_deposits, deposit_index)
+
+  if user_deposit.reward_amount == 0 do
+    throw(message: "no rewards", code: 2003)
+  end
+
+  true
+end
 
 actions triggered_by: transaction, on: claim(deposit_index) do
   previous_address = Chain.get_previous_address(transaction)
@@ -76,7 +84,8 @@ actions triggered_by: transaction, on: claim(deposit_index) do
   deposits = res.deposits
   State.set("last_calculation_timestamp", res.last_calculation_timestamp)
 
-  user_deposit = Map.get(deposits, user_genesis_address)
+  user_deposits = Map.get(deposits, user_genesis_address)
+  user_deposit = List.at(user_deposits, deposit_index)
 
   if @REWARD_TOKEN == "UCO" do
     Contract.add_uco_transfer(to: transaction.address, amount: user_deposit.reward_amount)
@@ -93,8 +102,9 @@ actions triggered_by: transaction, on: claim(deposit_index) do
 
   State.set("rewards_reserved", res.rewards_reserved - user_deposit.reward_amount)
 
-  new_user_deposit = Map.set(user_deposit, "reward_amount", 0)
-  deposits = Map.set(deposits, user_genesis_address, new_user_deposit)
+  user_deposit = Map.set(user_deposit, "reward_amount", 0)
+  user_deposits = set_at(user_deposits, deposit_index, user_deposit)
+  deposits = Map.set(deposits, user_genesis_address, user_deposits)
 
   State.set("deposits", deposits)
 end
@@ -431,6 +441,20 @@ end
 
 fun(determine_end(level)) do
   Time.now() + Map.get(available_levels(), level)
+end
+
+fun set_at(list, index, value) do
+  list2 = []
+
+  for i in 0..List.size(list) do
+    if i == deposit_index do
+      list2 = List.append(list2, value)
+    else
+      list2 = List.append(list2, List.at(list, i))
+    end
+  end
+
+  list2
 end
 
 export fun(available_levels()) do

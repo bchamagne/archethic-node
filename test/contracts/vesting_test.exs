@@ -341,6 +341,85 @@ defmodule VestingTest do
     end
   end
 
+  test "claim/1 should throw if farm hasn't started", %{contract: contract} do
+    state = %{}
+
+    trigger =
+      Trigger.new()
+      |> Trigger.named_action("claim", %{"deposit_index" => 0})
+      |> Trigger.timestamp(@start_date |> DateTime.add(-1))
+
+    assert {:throw, 2000} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger)
+  end
+
+  test "claim/1 should throw if user has no deposits", %{contract: contract} do
+    state = %{}
+
+    trigger =
+      Trigger.new()
+      |> Trigger.named_action("claim", %{"deposit_index" => 0})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+
+    MockChain
+    |> expect(:get_genesis_address, fn _ -> trigger["genesis_address"] end)
+
+    assert {:throw, 2001} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger)
+  end
+
+  test "claim/1 should throw if index is invalid", %{contract: contract} do
+    state = %{}
+
+    trigger1 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("deposit", %{"level" => "0"})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+    trigger2 =
+      Trigger.new("seed", 2)
+      |> Trigger.named_action("claim", %{"deposit_index" => 999})
+      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+
+    MockChain
+    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+
+    assert {:throw, 2002} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger1)
+             |> trigger_contract(trigger2)
+  end
+
+  test "claim/1 should throw if reward_amount is 0", %{contract: contract} do
+    state = %{}
+
+    trigger1 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("deposit", %{"level" => "0"})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+    trigger2 =
+      Trigger.new("seed", 2)
+      |> Trigger.named_action("claim", %{"deposit_index" => 0})
+      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+
+    MockChain
+    |> expect(:get_genesis_address, 3, fn _ -> trigger1["genesis_address"] end)
+
+    assert {:throw, 2003} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger1)
+             |> trigger_contract(trigger2)
+  end
+
   defp amount_generator() do
     StreamData.float(min: 0.00000001)
     |> StreamData.map(&Decimal.from_float/1)
@@ -361,26 +440,12 @@ defmodule VestingTest do
   defp level_to_days(7), do: 1095
 end
 
-# test "claim/1 should throw if user has no claim", %{contract: contract} do
-#   state = %{}
-
-#   trigger =
-#     Trigger.new()
-#     |> Trigger.named_action("claim", %{"index" => 0})
-#     |> Trigger.timestamp(@end_date |> DateTime.add(1))
-
-#   assert {:throw, 2000} =
-#            contract
-#            |> prepare_contract(state)
-#            |> trigger_contract(trigger)
-# end
-
 # test "claim/1 should throw if index is invalid", %{contract: contract} do
 #   state = %{}
 
 #   trigger =
 #     Trigger.new()
-#     |> Trigger.named_action("claim", %{"index" => 999})
+#     |> Trigger.named_action("claim", %{"deposit_index" => 999})
 #     |> Trigger.timestamp(@end_date |> DateTime.add(1))
 
 #   assert {:throw, 2001} =
