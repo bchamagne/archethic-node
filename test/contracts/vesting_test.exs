@@ -497,17 +497,17 @@ defmodule VestingTest do
       db =
         amounts_durations_seeds
         |> Enum.with_index()
-        |> Enum.map(fn {{amount, _duration, seed}, i} ->
+        |> Enum.map(fn {{amount, duration, seed}, i} ->
           {
             amount,
-            10,
+            duration,
             Trigger.new(seed, 1)
             |> Trigger.named_action("deposit", %{"level" => "0"})
             |> Trigger.timestamp(@start_date |> DateTime.add(i + 1, :day))
             |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, amount),
             Trigger.new(seed, 2)
             |> Trigger.named_action("claim", %{"deposit_index" => 0})
-            |> Trigger.timestamp(@start_date |> DateTime.add(i + 1 + 10, :day))
+            |> Trigger.timestamp(@start_date |> DateTime.add(i + 1 + duration, :day))
           }
         end)
 
@@ -535,9 +535,6 @@ defmodule VestingTest do
                  prepare_contract(contract, state, @initial_balance),
                  &trigger_contract(&2, &1, ignore_condition_failed: true)
                )
-
-      refute next_state["lp_token_deposited"] |> Decimal.negative?()
-      refute next_state["rewards_reserved"] |> Decimal.negative?()
 
       assert Decimal.add(next_uco_balance, next_state["reward_distributed"])
              |> Decimal.eq?(@initial_balance)
@@ -625,10 +622,10 @@ defmodule VestingTest do
       db =
         amounts_durations_seeds
         |> Enum.with_index()
-        |> Enum.map(fn {{amount, _duration, seed}, i} ->
+        |> Enum.map(fn {{amount, duration, seed}, i} ->
           {
             amount,
-            10,
+            duration,
             Trigger.new(seed, 1)
             |> Trigger.named_action("deposit", %{"level" => "0"})
             |> Trigger.timestamp(@start_date |> DateTime.add(i + 1, :day))
@@ -638,7 +635,7 @@ defmodule VestingTest do
               "amount" => amount,
               "deposit_index" => 0
             })
-            |> Trigger.timestamp(@start_date |> DateTime.add(i + 1 + 10, :day))
+            |> Trigger.timestamp(@start_date |> DateTime.add(i + 1 + duration, :day))
           }
         end)
 
@@ -664,12 +661,108 @@ defmodule VestingTest do
                Enum.reduce(
                  triggers,
                  prepare_contract(contract, state, @initial_balance),
-                 &trigger_contract(&2, &1, ignore_condition_failed: true)
+                 &trigger_contract(&2, &1)
                )
 
       assert 0 == map_size(next_state["deposits"])
-      refute next_state["lp_token_deposited"] |> Decimal.negative?()
-      refute next_state["rewards_reserved"] |> Decimal.negative?()
+      assert Decimal.eq?(0, next_state["lp_token_deposited"])
+      assert Decimal.eq?(0, next_state["rewards_reserved"])
+
+      assert Decimal.add(next_uco_balance, next_state["reward_distributed"])
+             |> Decimal.eq?(@initial_balance)
+    end
+  end
+
+  property "withdraw/2 should transfer the funds and update the state (withdraw partial amount)",
+           %{
+             contract: contract
+           } do
+    check all(
+            amounts_durations_seeds <-
+              StreamData.list_of(
+                StreamData.tuple(
+                  {amount_generator(), StreamData.integer(1..365), StreamData.binary(length: 10)}
+                ),
+                min_length: 2,
+                max_length: 10
+              )
+          ) do
+      db =
+        amounts_durations_seeds
+        |> Enum.with_index()
+        |> Enum.map(fn {{deposit_amount, duration, seed}, i} ->
+          withdraw_amount = Decimal.div(deposit_amount, 2) |> Decimal.max("0.00000001")
+
+          {
+            deposit_amount,
+            withdraw_amount,
+            duration,
+            Trigger.new(seed, 1)
+            |> Trigger.named_action("deposit", %{"level" => "0"})
+            |> Trigger.timestamp(@start_date |> DateTime.add(i + 1, :day))
+            |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, deposit_amount),
+            Trigger.new(seed, 2)
+            |> Trigger.named_action("withdraw", %{
+              "amount" => withdraw_amount,
+              "deposit_index" => 0
+            })
+            |> Trigger.timestamp(@start_date |> DateTime.add(i + 1 + duration, :day))
+          }
+        end)
+
+      state = %{}
+
+      triggers =
+        (Enum.map(db, &elem(&1, 3)) ++ Enum.map(db, &elem(&1, 4)))
+        |> Enum.sort_by(& &1["timestamp"])
+
+      MockChain
+      |> stub(:get_genesis_address, fn
+        previous_address ->
+          trigger =
+            Enum.find(
+              triggers,
+              &(Trigger.get_previous_address(&1) == previous_address)
+            )
+
+          trigger["genesis_address"]
+      end)
+
+      assert %{state: next_state, uco_balance: next_uco_balance} =
+               Enum.reduce(
+                 triggers,
+                 prepare_contract(contract, state, @initial_balance),
+                 &trigger_contract(&2, &1)
+               )
+
+      deposits = next_state["deposits"]
+
+      assert amounts_durations_seeds
+             |> Enum.reject(&Decimal.eq?(elem(&1, 0), Decimal.new("0.00000001")))
+             |> length() == map_size(deposits)
+
+      for {deposit_amount, withdraw_amount, _duration, trigger1, _trigger2} <- db do
+        user_deposits = deposits[trigger1["genesis_address"]]
+
+        remaining = Decimal.sub(deposit_amount, withdraw_amount)
+
+        if Decimal.eq?(0, remaining) do
+          assert is_nil(user_deposits)
+        else
+          refute user_deposits
+                 |> Enum.find(&Decimal.eq?(&1["amount"], remaining))
+                 |> is_nil()
+        end
+      end
+
+      assert Decimal.eq?(
+               next_state["rewards_reserved"],
+               next_state["deposits"]
+               |> Map.values()
+               |> List.flatten()
+               |> Enum.map(& &1["reward_amount"])
+               |> Enum.reduce(0, &Decimal.add/2)
+             )
 
       assert Decimal.add(next_uco_balance, next_state["reward_distributed"])
              |> Decimal.eq?(@initial_balance)
@@ -696,17 +789,3 @@ defmodule VestingTest do
   defp level_to_days(6), do: 730
   defp level_to_days(7), do: 1095
 end
-
-# test "claim/1 should throw if index is invalid", %{contract: contract} do
-#   state = %{}
-
-#   trigger =
-#     Trigger.new()
-#     |> Trigger.named_action("claim", %{"deposit_index" => 999})
-#     |> Trigger.timestamp(@end_date |> DateTime.add(1))
-
-#   assert {:throw, 2001} =
-#            contract
-#            |> prepare_contract(state)
-#            |> trigger_contract(trigger)
-# end
