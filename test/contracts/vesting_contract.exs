@@ -107,24 +107,32 @@ actions triggered_by: transaction, on: claim(deposit_index) do
   State.set("deposits", deposits)
 end
 
-condition(
-  triggered_by: transaction,
-  on: withdraw(amount),
-  as: [
-    previous_public_key:
-      (
-        previous_address = Chain.get_previous_address()
-        genesis_address = Chain.get_genesis_address(previous_address)
+condition triggered_by: transaction, on: withdraw(amount, deposit_index) do
+  previous_address = Chain.get_previous_address(transaction)
+  genesis_address = Chain.get_genesis_address(previous_address)
 
-        deposits = State.get("deposits", Map.new())
-        user_deposit = Map.get(deposits, genesis_address)
+  deposits = State.get("deposits", Map.new())
+  user_deposits = Map.get(deposits, genesis_address, [])
+  user_deposits_size = List.size(user_deposits)
 
-        user_deposit != nil && user_deposit.amount >= amount
-      )
-  ]
-)
+  if user_deposits_size == 0 do
+    throw(message: "user has no claim", code: 3001)
+  end
 
-actions triggered_by: transaction, on: withdraw(amount) do
+  if user_deposits_size < deposit_index + 1 do
+    throw(message: "invalid index", code: 3002)
+  end
+
+  user_deposit = List.at(user_deposits, deposit_index)
+
+  if amount > user_deposit.amount do
+    throw(message: "amount requested is greater than amount deposited", code: 3003)
+  end
+
+  true
+end
+
+actions triggered_by: transaction, on: withdraw(amount, deposit_index) do
   previous_address = Chain.get_previous_address(transaction)
   user_genesis_address = Chain.get_genesis_address(previous_address)
 

@@ -542,6 +542,71 @@ defmodule VestingTest do
     end
   end
 
+  test "withdraw/2 should throw if user has no deposits", %{contract: contract} do
+    state = %{}
+
+    trigger =
+      Trigger.new()
+      |> Trigger.named_action("withdraw", %{"amount" => 1, "deposit_index" => 0})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+
+    MockChain
+    |> expect(:get_genesis_address, fn _ -> trigger["genesis_address"] end)
+
+    assert {:throw, 3001} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger)
+  end
+
+  test "withdraw/2 should throw if index is invalid", %{contract: contract} do
+    state = %{}
+
+    trigger1 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("deposit", %{"level" => "0"})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+    trigger2 =
+      Trigger.new("seed", 2)
+      |> Trigger.named_action("withdraw", %{"amount" => 1, "deposit_index" => 999})
+      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+
+    MockChain
+    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+
+    assert {:throw, 3002} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger1)
+             |> trigger_contract(trigger2)
+  end
+
+  test "withdraw/2 should throw if amount is bigger than deposit", %{contract: contract} do
+    state = %{}
+
+    trigger1 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("deposit", %{"level" => "0"})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+    trigger2 =
+      Trigger.new("seed", 2)
+      |> Trigger.named_action("withdraw", %{"amount" => 2, "deposit_index" => 0})
+      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+
+    MockChain
+    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+
+    assert {:throw, 3003} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger1)
+             |> trigger_contract(trigger2)
+  end
+
   defp amount_generator() do
     StreamData.float(min: 0.00000001)
     |> StreamData.map(&Decimal.from_float/1)
