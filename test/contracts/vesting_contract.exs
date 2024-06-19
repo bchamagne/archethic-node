@@ -166,8 +166,10 @@ actions triggered_by: transaction, on: withdraw(amount, deposit_index) do
     reward_distributed = State.get("reward_distributed", 0)
     State.set("reward_distributed", reward_distributed + user_deposit.reward_amount)
 
-    State.set("rewards_reserved", rewards_reserved - user_deposit.reward_amount)
+    rewards_reserved = rewards_reserved - user_deposit.reward_amount
   end
+
+  State.set("rewards_reserved", rewards_reserved)
 
   Contract.add_token_transfer(
     to: transaction.address,
@@ -180,7 +182,12 @@ actions triggered_by: transaction, on: withdraw(amount, deposit_index) do
 
   if amount == user_deposit.amount do
     user_deposits = delete_at(user_deposits, deposit_index)
-    deposits = Map.set(deposits, user_genesis_address, user_deposits)
+
+    if List.size(user_deposits) > 0 do
+      deposits = Map.set(deposits, user_genesis_address, user_deposits)
+    else
+      deposits = Map.delete(deposits, user_genesis_address)
+    end
   else
     user_deposit = Map.set(user_deposit, "reward_amount", 0)
     user_deposit = Map.set(user_deposit, "amount", user_deposit.amount - amount)
@@ -345,7 +352,9 @@ fun calculate_new_rewards() do
 
           if new_reward_amount > 0 do
             deposit = Map.set(deposit, "reward_amount", deposit.reward_amount + new_reward_amount)
+
             rewards_reserved = rewards_reserved + new_reward_amount
+
             last_calculation_timestamp = now
           end
 

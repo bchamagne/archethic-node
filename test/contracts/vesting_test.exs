@@ -536,6 +536,9 @@ defmodule VestingTest do
                  &trigger_contract(&2, &1, ignore_condition_failed: true)
                )
 
+      refute next_state["lp_token_deposited"] |> Decimal.negative?()
+      refute next_state["rewards_reserved"] |> Decimal.negative?()
+
       assert Decimal.add(next_uco_balance, next_state["reward_distributed"])
              |> Decimal.eq?(@initial_balance)
     end
@@ -664,13 +667,18 @@ defmodule VestingTest do
                  &trigger_contract(&2, &1, ignore_condition_failed: true)
                )
 
+      assert 0 == map_size(next_state["deposits"])
+      refute next_state["lp_token_deposited"] |> Decimal.negative?()
+      refute next_state["rewards_reserved"] |> Decimal.negative?()
+
       assert Decimal.add(next_uco_balance, next_state["reward_distributed"])
              |> Decimal.eq?(@initial_balance)
     end
   end
 
   defp amount_generator() do
-    StreamData.float(min: 0.00000001)
+    # no need to generate a number bigger than 2 ** 64
+    StreamData.float(min: 0.00000001, max: 18_446_744_073_709_551_615.0)
     |> StreamData.map(&Decimal.from_float/1)
     |> StreamData.map(&Decimal.round(&1, 8))
   end
