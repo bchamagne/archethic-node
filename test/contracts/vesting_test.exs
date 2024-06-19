@@ -508,7 +508,6 @@ defmodule VestingTest do
             Trigger.new(seed, 2)
             |> Trigger.named_action("claim", %{"deposit_index" => 0})
             |> Trigger.timestamp(@start_date |> DateTime.add(i + 1 + 10, :day))
-            |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, amount)
           }
         end)
 
@@ -605,6 +604,69 @@ defmodule VestingTest do
              |> prepare_contract(state)
              |> trigger_contract(trigger1)
              |> trigger_contract(trigger2)
+  end
+
+  property "withdraw/2 should transfer the funds and update the state (withdraw max amount)", %{
+    contract: contract
+  } do
+    check all(
+            amounts_durations_seeds <-
+              StreamData.list_of(
+                StreamData.tuple(
+                  {amount_generator(), StreamData.integer(1..365), StreamData.binary(length: 10)}
+                ),
+                min_length: 2,
+                max_length: 10
+              )
+          ) do
+      db =
+        amounts_durations_seeds
+        |> Enum.with_index()
+        |> Enum.map(fn {{amount, _duration, seed}, i} ->
+          {
+            amount,
+            10,
+            Trigger.new(seed, 1)
+            |> Trigger.named_action("deposit", %{"level" => "0"})
+            |> Trigger.timestamp(@start_date |> DateTime.add(i + 1, :day))
+            |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, amount),
+            Trigger.new(seed, 2)
+            |> Trigger.named_action("withdraw", %{
+              "amount" => amount,
+              "deposit_index" => 0
+            })
+            |> Trigger.timestamp(@start_date |> DateTime.add(i + 1 + 10, :day))
+          }
+        end)
+
+      state = %{}
+
+      triggers =
+        (Enum.map(db, &elem(&1, 2)) ++ Enum.map(db, &elem(&1, 3)))
+        |> Enum.sort_by(& &1["timestamp"])
+
+      MockChain
+      |> stub(:get_genesis_address, fn
+        previous_address ->
+          trigger =
+            Enum.find(
+              triggers,
+              &(Trigger.get_previous_address(&1) == previous_address)
+            )
+
+          trigger["genesis_address"]
+      end)
+
+      assert %{state: next_state, uco_balance: next_uco_balance} =
+               Enum.reduce(
+                 triggers,
+                 prepare_contract(contract, state, @initial_balance),
+                 &trigger_contract(&2, &1, ignore_condition_failed: true)
+               )
+
+      assert Decimal.add(next_uco_balance, next_state["reward_distributed"])
+             |> Decimal.eq?(@initial_balance)
+    end
   end
 
   defp amount_generator() do

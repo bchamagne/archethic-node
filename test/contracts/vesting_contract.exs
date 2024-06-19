@@ -149,7 +149,8 @@ actions triggered_by: transaction, on: withdraw(amount, deposit_index) do
     rewards_reserved = State.get("rewards_reserved", 0)
   end
 
-  user_deposit = Map.get(deposits, user_genesis_address)
+  user_deposits = Map.get(deposits, user_genesis_address)
+  user_deposit = List.at(user_deposits, deposit_index)
 
   if user_deposit.reward_amount > 0 do
     if @REWARD_TOKEN == "UCO" do
@@ -178,11 +179,13 @@ actions triggered_by: transaction, on: withdraw(amount, deposit_index) do
   State.set("lp_token_deposited", lp_token_deposited - amount)
 
   if amount == user_deposit.amount do
-    deposits = Map.delete(deposits, user_genesis_address)
+    user_deposits = delete_at(user_deposits, deposit_index)
+    deposits = Map.set(deposits, user_genesis_address, user_deposits)
   else
-    new_deposit = Map.set(user_deposit, "reward_amount", 0)
-    new_deposit = Map.set(new_deposit, "amount", user_deposit.amount - amount)
-    deposits = Map.set(deposits, user_genesis_address, new_deposit)
+    user_deposit = Map.set(user_deposit, "reward_amount", 0)
+    user_deposit = Map.set(user_deposit, "amount", user_deposit.amount - amount)
+    user_deposits = set_at(user_deposits, deposit_index, user_deposit)
+    deposits = Map.set(deposits, user_genesis_address, user_deposits)
   end
 
   State.set("deposits", deposits)
@@ -457,6 +460,21 @@ fun set_at(list, index, value) do
     if i == index do
       list2 = List.append(list2, value)
     else
+      list2 = List.append(list2, List.at(list, i))
+    end
+
+    i = i + 1
+  end
+
+  list2
+end
+
+fun delete_at(list, index) do
+  list2 = []
+  i = 0
+
+  for _ in list do
+    if i != index do
       list2 = List.append(list2, List.at(list, i))
     end
 
