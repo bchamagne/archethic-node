@@ -69,11 +69,7 @@ condition triggered_by: transaction, on: claim(deposit_index) do
   user_deposits = Map.get(res.deposits, genesis_address)
   user_deposit = List.at(user_deposits, deposit_index)
 
-  if user_deposit.reward_amount == 0 do
-    throw(message: "no rewards", code: 2003)
-  end
-
-  true
+  user_deposit.reward_amount > 0
 end
 
 actions triggered_by: transaction, on: claim(deposit_index) do
@@ -103,7 +99,9 @@ actions triggered_by: transaction, on: claim(deposit_index) do
   State.set("rewards_reserved", res.rewards_reserved - user_deposit.reward_amount)
 
   user_deposit = Map.set(user_deposit, "reward_amount", 0)
+
   user_deposits = set_at(user_deposits, deposit_index, user_deposit)
+
   deposits = Map.set(deposits, user_genesis_address, user_deposits)
 
   State.set("deposits", deposits)
@@ -445,13 +443,16 @@ end
 
 fun set_at(list, index, value) do
   list2 = []
+  i = 0
 
-  for i in 0..List.size(list) do
-    if i == deposit_index do
+  for _ in list do
+    if i == index do
       list2 = List.append(list2, value)
     else
       list2 = List.append(list2, List.at(list, i))
     end
+
+    i = i + 1
   end
 
   list2

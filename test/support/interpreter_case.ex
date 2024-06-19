@@ -14,6 +14,7 @@ defmodule InterpreterCase do
   alias Archethic.Contracts.Conditions
   alias Archethic.TransactionChain.Transaction
   alias Archethic.TransactionChain.TransactionData
+  alias Archethic.Utils
 
   using do
     quote do
@@ -30,6 +31,20 @@ defmodule InterpreterCase do
         )
 
         Application.put_env(:archethic, MockChain, enabled: false)
+
+        # Define some default mock behaviour
+        MockChain
+        |> stub(
+          :get_genesis_address,
+          fn
+            address when is_binary(address) -> throw("missing mock Chain.get_genesis_address/1")
+            constants when is_map(constants) -> constants["genesis_address"]
+          end
+        )
+        |> stub(
+          :get_previous_address,
+          &Archethic.Contracts.Interpreter.Library.Common.ChainImpl.get_previous_address/1
+        )
 
         # unload the mocks
         on_exit(fn ->
@@ -74,23 +89,13 @@ defmodule InterpreterCase do
         :state => contract.state
       })
 
-    # Define some default mock behaviour
-    MockChain
-    |> stub(
-      :get_genesis_address,
-      fn
-        address when is_binary(address) -> throw("missing mock Chain.get_genesis_address/1")
-        constants when is_map(constants) -> constants["genesis_address"]
-      end
-    )
-    |> stub(
-      :get_previous_address,
-      &Archethic.Contracts.Interpreter.Library.Common.ChainImpl.get_previous_address/1
-    )
-
     case ConditionValidator.execute_condition(condition_ast, constants) do
-      {:error, failure} ->
-        {:condition_failed, failure}
+      {:error, failure, _logs} ->
+        if Keyword.get(opts, :ignore_condition_failed, false) do
+          contract
+        else
+          {:condition_failed, failure}
+        end
 
       {:ok, _} ->
         %{ast: action_ast} = Map.get(contract.triggers, trigger_type)
@@ -109,6 +114,18 @@ defmodule InterpreterCase do
             # todo: many things
             contract
             |> Map.put(:state, next_state)
+            |> Map.update!(:uco_balance, fn previous_balance ->
+              uco_transfers_amount =
+                next_tx.data.ledger.uco.transfers
+                |> Enum.map(
+                  &(&1.amount
+                    |> Utils.bigint_to_decimal()
+                    |> Utils.maybe_decimal_to_integer())
+                )
+                |> Enum.reduce(0, &Decimal.add/2)
+
+              Decimal.sub(previous_balance, uco_transfers_amount)
+            end)
         end
     end
   rescue
