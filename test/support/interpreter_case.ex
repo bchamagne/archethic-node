@@ -10,6 +10,7 @@ defmodule InterpreterCase do
   alias Archethic.Contracts.Interpreter
   alias Archethic.Contracts.Interpreter.ActionInterpreter
   alias Archethic.Contracts.Interpreter.ConditionValidator
+  alias Archethic.Contracts.Interpreter.FunctionInterpreter
   alias Archethic.Contracts.Interpreter.Library.ErrorContractThrow
   alias Archethic.Contracts.Conditions
   alias Archethic.TransactionChain.Transaction
@@ -85,7 +86,7 @@ defmodule InterpreterCase do
         },
         :time_now => trigger_constants["timestamp"],
         :functions => contract.functions,
-        :encrypted_seed => Keyword.get(opts, :seed, :crypto.strong_rand_bytes(10)),
+
         :state => contract.state
       })
 
@@ -154,5 +155,22 @@ defmodule InterpreterCase do
     contract
     |> Map.put(:state, state)
     |> Map.put(:uco_balance, uco_balance)
+  end
+
+  def call_function(contract, function_name, args_values, time_now \\ DateTime.utc_now()) do
+    %{functions: functions} = contract
+    %{ast: ast, args: args_names} = Map.get(functions, {function_name, length(args_values)})
+
+    constants = %{
+      "contract" => %{
+        "balance" => %{
+          "uco" => contract.uco_balance
+        }
+      },
+      :time_now => DateTime.to_unix(time_now),
+      :state => contract.state
+    }
+
+    FunctionInterpreter.execute(ast, constants, args_names, args_values)
   end
 end

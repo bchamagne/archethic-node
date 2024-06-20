@@ -407,54 +407,64 @@ export fun(get_user_infos(user_genesis_address)) do
   user_genesis_address = String.to_hex(user_genesis_address)
 
   deposits = State.get("deposits", Map.new())
-  user_deposit = Map.get(deposits, user_genesis_address)
+  user_deposits = Map.get(deposits, user_genesis_address, [])
 
-  if user_deposit != nil do
-    lp_token_deposited = State.get("lp_token_deposited", 0)
-    last_calculation_timestamp = State.get("last_calculation_timestamp", @START_DATE)
+  reply = []
+  i = 0
+  now = Time.now()
+  day = 86400
 
-    now = Time.now()
+  for user_deposit in user_deposits do
+    remaining_lock_time = user_deposit.end - now
 
-    if now > @START_DATE && last_calculation_timestamp < now &&
-         last_calculation_timestamp < @END_DATE && lp_token_deposited > 0 do
-      rewards_balance = 0
+    level = nil
 
-      if @REWARD_TOKEN == "UCO" do
-        rewards_balance = contract.balance.uco
-      else
-        key = [token_address: @REWARD_TOKEN, token_id: 0]
-        rewards_balance = Map.get(contract.balance.tokens, key, 0)
-      end
-
-      rewards_reserved = State.get("rewards_reserved", 0)
-
-      available_balance = rewards_balance - rewards_reserved
-
-      amount_to_allocate = 0
-
-      if now >= @END_DATE do
-        amount_to_allocate = available_balance
-      else
-        time_elapsed = now - last_calculation_timestamp
-        time_remaining = @END_DATE - last_calculation_timestamp
-
-        amount_to_allocate = available_balance * (time_elapsed / time_remaining)
-      end
-
-      if amount_to_allocate > 0 do
-        new_reward_amount = amount_to_allocate * (user_deposit.amount / lp_token_deposited)
-
-        if new_reward_amount > 0 do
-          user_deposit =
-            Map.set(user_deposit, "reward_amount", user_deposit.reward_amount + new_reward_amount)
-        end
-      end
+    if remaining_lock_time < 0 do
+      level = "0"
     end
 
-    [deposited_amount: user_deposit.amount, reward_amount: user_deposit.reward_amount]
-  else
-    [deposited_amount: 0, reward_amount: 0]
+    if level == nil && remaining_lock_time < 7 * day do
+      level = "1"
+    end
+
+    if level == nil && remaining_lock_time < 30 * day do
+      level = "2"
+    end
+
+    if level == nil && remaining_lock_time < 90 * day do
+      level = "3"
+    end
+
+    if level == nil && remaining_lock_time < 180 * day do
+      level = "4"
+    end
+
+    if level == nil && remaining_lock_time < 365 * day do
+      level = "5"
+    end
+
+    if level == nil && remaining_lock_time < 730 * day do
+      level = "6"
+    end
+
+    if level == nil && remaining_lock_time < 1095 * day do
+      level = "7"
+    end
+
+    info = [
+      index: i,
+      amount: user_deposit.amount,
+      reward_amount: user_deposit.reward_amount,
+      end: user_deposit.end,
+      level: level,
+      max_level: "7"
+    ]
+
+    reply = List.append(reply, info)
+    i = i + 1
   end
+
+  reply
 end
 
 fun(determine_end(level)) do

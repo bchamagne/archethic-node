@@ -769,6 +769,81 @@ defmodule VestingTest do
     end
   end
 
+  property "get_user_infos/1 should return the deposits details", %{contract: contract} do
+    check all(
+            amounts_levels_seeds <-
+              StreamData.list_of(
+                StreamData.tuple({
+                  amount_generator(),
+                  StreamData.integer(0..7) |> StreamData.map(&Integer.to_string/1),
+                  StreamData.binary(length: 10)
+                }),
+                min_length: 2,
+                max_length: 10
+              ),
+            max_shrinking_steps: 0
+          ) do
+      db =
+        amounts_levels_seeds
+        |> Enum.with_index()
+        |> Enum.map(fn {{amount, level, seed}, i} ->
+          {
+            amount,
+            level,
+            i,
+            Trigger.new(seed, 1)
+            |> Trigger.named_action("deposit", %{"level" => level})
+            |> Trigger.timestamp(@start_date |> DateTime.add(i + 1, :day))
+            |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, amount)
+          }
+        end)
+
+      state = %{}
+
+      triggers =
+        Enum.map(db, &elem(&1, 3))
+        |> Enum.sort_by(& &1["timestamp"])
+
+      MockChain
+      |> stub(:get_genesis_address, fn
+        previous_address ->
+          trigger =
+            Enum.find(
+              triggers,
+              &(Trigger.get_previous_address(&1) == previous_address)
+            )
+
+          trigger["genesis_address"]
+      end)
+
+      assert result_contract =
+               Enum.reduce(
+                 triggers,
+                 prepare_contract(contract, state, @initial_balance),
+                 &trigger_contract(&2, &1)
+               )
+
+      for {amount, level, i, trigger} <- db do
+        user_infos =
+          call_function(result_contract, "get_user_infos", [trigger["genesis_address"]])
+
+        assert length(user_infos) == 1
+        user_info = hd(user_infos)
+        assert String.to_integer(user_info["level"]) <= String.to_integer(level)
+        assert Decimal.eq?(user_info["amount"], amount)
+        assert 0 == user_info["index"]
+
+        assert Decimal.eq?(
+                 user_info["end"],
+                 @start_date
+                 |> DateTime.add(i + 1, :day)
+                 |> DateTime.add(level_to_days(String.to_integer(level)) * 86400, :second)
+                 |> DateTime.to_unix()
+               )
+      end
+    end
+  end
+
   defp amount_generator() do
     # no need to generate a number bigger than 2 ** 64
     StreamData.float(min: 0.00000001, max: 18_446_744_073_709_551_615.0)
