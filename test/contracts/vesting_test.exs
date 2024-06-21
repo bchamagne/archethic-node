@@ -147,7 +147,7 @@ defmodule VestingTest do
                )
 
       deposits = next_state["deposits"]
-      lp_token_deposited = next_state["lp_token_deposited"]
+      lp_tokens_deposited = next_state["lp_tokens_deposited"]
 
       assert triggers_count == map_size(deposits)
 
@@ -161,7 +161,7 @@ defmodule VestingTest do
 
       expected_lp_tokens = Enum.reduce(db, Decimal.new(0), &Decimal.add(elem(&1, 0), &2))
 
-      assert Decimal.eq?(lp_token_deposited, expected_lp_tokens)
+      assert Decimal.eq?(lp_tokens_deposited, expected_lp_tokens)
     end
   end
 
@@ -207,7 +207,7 @@ defmodule VestingTest do
                )
 
       deposits = next_state["deposits"]
-      lp_token_deposited = next_state["lp_token_deposited"]
+      lp_tokens_deposited = next_state["lp_tokens_deposited"]
 
       assert triggers_count == map_size(deposits)
 
@@ -221,7 +221,7 @@ defmodule VestingTest do
 
       expected_lp_tokens = Enum.reduce(db, Decimal.new(0), &Decimal.add(elem(&1, 0), &2))
 
-      assert Decimal.eq?(lp_token_deposited, expected_lp_tokens)
+      assert Decimal.eq?(lp_tokens_deposited, expected_lp_tokens)
     end
   end
 
@@ -344,7 +344,7 @@ defmodule VestingTest do
       end
 
       expected_lp_tokens = Enum.reduce(db, Decimal.new(0), &Decimal.add(elem(&1, 0), &2))
-      assert Decimal.eq?(next_state["lp_token_deposited"], expected_lp_tokens)
+      assert Decimal.eq?(next_state["lp_tokens_deposited"], expected_lp_tokens)
     end
   end
 
@@ -536,7 +536,7 @@ defmodule VestingTest do
                  &trigger_contract(&2, &1, ignore_condition_failed: true)
                )
 
-      assert Decimal.add(next_uco_balance, next_state["reward_distributed"])
+      assert Decimal.add(next_uco_balance, next_state["rewards_distributed"])
              |> Decimal.eq?(@initial_balance)
     end
   end
@@ -665,10 +665,10 @@ defmodule VestingTest do
                )
 
       assert 0 == map_size(next_state["deposits"])
-      assert Decimal.eq?(0, next_state["lp_token_deposited"])
+      assert Decimal.eq?(0, next_state["lp_tokens_deposited"])
       assert Decimal.eq?(0, next_state["rewards_reserved"])
 
-      assert Decimal.add(next_uco_balance, next_state["reward_distributed"])
+      assert Decimal.add(next_uco_balance, next_state["rewards_distributed"])
              |> Decimal.eq?(@initial_balance)
     end
   end
@@ -764,7 +764,7 @@ defmodule VestingTest do
                |> Enum.reduce(0, &Decimal.add/2)
              )
 
-      assert Decimal.add(next_uco_balance, next_state["reward_distributed"])
+      assert Decimal.add(next_uco_balance, next_state["rewards_distributed"])
              |> Decimal.eq?(@initial_balance)
     end
   end
@@ -780,8 +780,7 @@ defmodule VestingTest do
                 }),
                 min_length: 2,
                 max_length: 10
-              ),
-            max_shrinking_steps: 0
+              )
           ) do
       db =
         amounts_levels_seeds
@@ -840,6 +839,78 @@ defmodule VestingTest do
                  |> DateTime.add(level_to_days(String.to_integer(level)) * 86400, :second)
                  |> DateTime.to_unix()
                )
+      end
+    end
+  end
+
+  property "get_farm_infos/0 should return the farm details", %{contract: contract} do
+    check all(
+            amounts_levels_seeds <-
+              StreamData.list_of(
+                StreamData.tuple({
+                  amount_generator(),
+                  StreamData.integer(0..7) |> StreamData.map(&Integer.to_string/1),
+                  StreamData.binary(length: 10)
+                }),
+                min_length: 2,
+                max_length: 10
+              )
+          ) do
+      db =
+        amounts_levels_seeds
+        |> Enum.with_index()
+        |> Enum.map(fn {{amount, level, seed}, i} ->
+          {
+            amount,
+            level,
+            i,
+            Trigger.new(seed, 1)
+            |> Trigger.named_action("deposit", %{"level" => level})
+            |> Trigger.timestamp(@start_date |> DateTime.add(i + 1, :day))
+            |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, amount)
+          }
+        end)
+
+      state = %{}
+
+      triggers =
+        Enum.map(db, &elem(&1, 3))
+        |> Enum.sort_by(& &1["timestamp"])
+
+      MockChain
+      |> stub(:get_genesis_address, fn
+        previous_address ->
+          trigger =
+            Enum.find(
+              triggers,
+              &(Trigger.get_previous_address(&1) == previous_address)
+            )
+
+          trigger["genesis_address"]
+      end)
+
+      assert result_contract =
+               Enum.reduce(
+                 triggers,
+                 prepare_contract(contract, state, @initial_balance),
+                 &trigger_contract(&2, &1)
+               )
+
+      farm_infos = call_function(result_contract, "get_farm_infos", [])
+      assert farm_infos["end_date"] == DateTime.to_unix(@end_date)
+      assert farm_infos["start_date"] == DateTime.to_unix(@start_date)
+      assert farm_infos["reward_token"] == "UCO"
+      assert farm_infos["stats"] |> Map.keys() == ["0", "1", "2", "3", "4", "5", "6", "7"]
+
+      expected_lp_tokens_deposited = db |> Enum.map(&elem(&1, 0)) |> Enum.reduce(&Decimal.add/2)
+      assert farm_infos["stats"] |> Map.values() |> Enum.reduce(0, &Decimal.add(&1["lp_tokens_deposited"], &2)) |> Decimal.eq?(expected_lp_tokens_deposited)
+
+      assert Decimal.sub(@initial_balance, farm_infos["stats"] |> Map.values() |> Enum.reduce(0, &Decimal.add(&1["rewards_distributed"], &2))) |> Decimal.eq?(farm_infos["remaining_reward"] )
+
+      for stat <- Map.values(farm_infos["stats"]) do
+        refute Decimal.negative?(Decimal.new(stat["deposits_count"]))
+        refute Decimal.negative?(Decimal.new(stat["lp_tokens_deposited"]))
+        refute Decimal.negative?(Decimal.new(stat["rewards_distributed"]))
       end
     end
   end

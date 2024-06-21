@@ -33,7 +33,8 @@ actions triggered_by: transaction, on: deposit(level) do
     deposits = State.get("deposits", Map.new())
   end
 
-  current_deposit = [amount: transfer_amount, reward_amount: 0, end: determine_end(level)]
+  end_by_level = available_levels()
+  current_deposit = [amount: transfer_amount, reward_amount: 0, end: Map.get(end_by_level, level)]
 
   user_deposits = Map.get(deposits, user_genesis_address, [])
   user_deposits = List.append(user_deposits, current_deposit)
@@ -41,8 +42,8 @@ actions triggered_by: transaction, on: deposit(level) do
 
   State.set("deposits", deposits)
 
-  lp_token_deposited = State.get("lp_token_deposited", 0)
-  State.set("lp_token_deposited", lp_token_deposited + transfer_amount)
+  lp_tokens_deposited = State.get("lp_tokens_deposited", 0)
+  State.set("lp_tokens_deposited", lp_tokens_deposited + transfer_amount)
 end
 
 condition triggered_by: transaction, on: claim(deposit_index) do
@@ -93,8 +94,8 @@ actions triggered_by: transaction, on: claim(deposit_index) do
     )
   end
 
-  reward_distributed = State.get("reward_distributed", 0)
-  State.set("reward_distributed", reward_distributed + user_deposit.reward_amount)
+  rewards_distributed = State.get("rewards_distributed", 0)
+  State.set("rewards_distributed", rewards_distributed + user_deposit.reward_amount)
 
   State.set("rewards_reserved", res.rewards_reserved - user_deposit.reward_amount)
 
@@ -163,8 +164,8 @@ actions triggered_by: transaction, on: withdraw(amount, deposit_index) do
       )
     end
 
-    reward_distributed = State.get("reward_distributed", 0)
-    State.set("reward_distributed", reward_distributed + user_deposit.reward_amount)
+    rewards_distributed = State.get("rewards_distributed", 0)
+    State.set("rewards_distributed", rewards_distributed + user_deposit.reward_amount)
 
     rewards_reserved = rewards_reserved - user_deposit.reward_amount
   end
@@ -177,8 +178,8 @@ actions triggered_by: transaction, on: withdraw(amount, deposit_index) do
     token_address: @LP_TOKEN_ADDRESS
   )
 
-  lp_token_deposited = State.get("lp_token_deposited")
-  State.set("lp_token_deposited", lp_token_deposited - amount)
+  lp_tokens_deposited = State.get("lp_tokens_deposited")
+  State.set("lp_tokens_deposited", lp_tokens_deposited - amount)
 
   if amount == user_deposit.amount do
     user_deposits = delete_at(user_deposits, deposit_index)
@@ -312,14 +313,14 @@ end
 
 fun calculate_new_rewards() do
   deposits = State.get("deposits", Map.new())
-  lp_token_deposited = State.get("lp_token_deposited", 0)
+  lp_tokens_deposited = State.get("lp_tokens_deposited", 0)
   rewards_reserved = State.get("rewards_reserved", 0)
   last_calculation_timestamp = State.get("last_calculation_timestamp", @START_DATE)
 
   now = Time.now()
 
   if last_calculation_timestamp < now && last_calculation_timestamp < @END_DATE &&
-       lp_token_deposited > 0 do
+       lp_tokens_deposited > 0 do
     rewards_balance = 0
 
     if @REWARD_TOKEN == "UCO" do
@@ -348,7 +349,7 @@ fun calculate_new_rewards() do
         user_deposits_updated = []
 
         for deposit in user_deposits do
-          new_reward_amount = amount_to_allocate * (deposit.amount / lp_token_deposited)
+          new_reward_amount = amount_to_allocate * (deposit.amount / lp_tokens_deposited)
 
           if new_reward_amount > 0 do
             deposit = Map.set(deposit, "reward_amount", deposit.reward_amount + new_reward_amount)
@@ -374,7 +375,9 @@ fun calculate_new_rewards() do
 end
 
 export fun(get_farm_infos()) do
+  now = Time.now()
   reward_token_balance = 0
+  day = 86400
 
   if @REWARD_TOKEN == "UCO" do
     reward_token_balance = contract.balance.uco
@@ -389,17 +392,95 @@ export fun(get_farm_infos()) do
     remaining_reward = reward_token_balance - State.get("rewards_reserved", 0)
   end
 
+  deposits = State.get("deposits", Map.new())
+
+  stats = Map.new()
+  stats = Map.set(stats, "0", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
+  stats = Map.set(stats, "1", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
+  stats = Map.set(stats, "2", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
+  stats = Map.set(stats, "3", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
+  stats = Map.set(stats, "4", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
+  stats = Map.set(stats, "5", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
+  stats = Map.set(stats, "6", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
+  stats = Map.set(stats, "7", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
+
+  for user_genesis in Map.keys(deposits) do
+    user_deposits = Map.get(deposits, user_genesis)
+
+    for user_deposit in user_deposits do
+      remaining_lock_time = user_deposit.end - now
+
+      level = nil
+
+      if remaining_lock_time < 0 do
+        level = "0"
+      end
+
+      if level == nil && remaining_lock_time < 7 * day do
+        level = "1"
+      end
+
+      if level == nil && remaining_lock_time < 30 * day do
+        level = "2"
+      end
+
+      if level == nil && remaining_lock_time < 90 * day do
+        level = "3"
+      end
+
+      if level == nil && remaining_lock_time < 180 * day do
+        level = "4"
+      end
+
+      if level == nil && remaining_lock_time < 365 * day do
+        level = "5"
+      end
+
+      if level == nil && remaining_lock_time < 730 * day do
+        level = "6"
+      end
+
+      if level == nil && remaining_lock_time < 1095 * day do
+        level = "7"
+      end
+
+      stats_for_level = Map.get(stats, level)
+      lp_tokens_deposited_for_level = Map.get(stats_for_level, "lp_tokens_deposited")
+      rewards_distributed_for_level = Map.get(stats_for_level, "rewards_distributed")
+      deposits_count_for_level = Map.get(stats_for_level, "deposits_count")
+
+      stats_for_level =
+        Map.set(
+          stats_for_level,
+          "lp_tokens_deposited",
+          lp_tokens_deposited_for_level + user_deposit.amount
+        )
+
+      stats_for_level =
+        Map.set(
+          stats_for_level,
+          "rewards_distributed",
+          rewards_distributed_for_level + user_deposit.reward_amount
+        )
+
+      stats_for_level =
+        Map.set(
+          stats_for_level,
+          "deposits_count",
+          deposits_count_for_level + 1
+        )
+
+      stats = Map.set(stats, level, stats_for_level)
+    end
+  end
+
   [
     lp_token_address: @LP_TOKEN_ADDRESS,
     reward_token: @REWARD_TOKEN,
     start_date: @START_DATE,
     end_date: @END_DATE,
     remaining_reward: remaining_reward,
-    lp_token_deposited: State.get("lp_token_deposited", 0),
-    nb_deposit: Map.size(State.get("deposits", Map.new())),
-    stats: [
-      reward_distributed: State.get("reward_distributed", 0)
-    ]
+    stats: stats
   ]
 end
 
@@ -467,10 +548,6 @@ export fun(get_user_infos(user_genesis_address)) do
   reply
 end
 
-fun(determine_end(level)) do
-  Time.now() + Map.get(available_levels(), level)
-end
-
 fun set_at(list, index, value) do
   list2 = []
   i = 0
@@ -504,15 +581,17 @@ fun delete_at(list, index) do
 end
 
 export fun(available_levels()) do
+  now = Time.now()
+
   day = 86400
   map = Map.new()
-  map = Map.set(map, "0", 0)
-  map = Map.set(map, "1", 7 * day)
-  map = Map.set(map, "2", 30 * day)
-  map = Map.set(map, "3", 90 * day)
-  map = Map.set(map, "4", 180 * day)
-  map = Map.set(map, "5", 365 * day)
-  map = Map.set(map, "6", 730 * day)
-  map = Map.set(map, "7", 1095 * day)
+  map = Map.set(map, "0", now + 0)
+  map = Map.set(map, "1", now + 7 * day)
+  map = Map.set(map, "2", now + 30 * day)
+  map = Map.set(map, "3", now + 90 * day)
+  map = Map.set(map, "4", now + 180 * day)
+  map = Map.set(map, "5", now + 365 * day)
+  map = Map.set(map, "6", now + 730 * day)
+  map = Map.set(map, "7", now + 1095 * day)
   map
 end
