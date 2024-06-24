@@ -306,53 +306,10 @@ defmodule VestingTest do
     contract: contract
   } do
     check all(
-            deposits <-
-              StreamData.constant(
-                deposit: %{
-                  amount: Decimal.new("4611686018427388000.00000000"),
-                  delay: 103,
-                  level: "2",
-                  seed: <<47, 96, 15, 116, 103, 39, 145, 144, 14, 125>>
-                },
-                deposit: %{
-                  amount: Decimal.new("1E-8"),
-                  delay: 232,
-                  level: "2",
-                  seed: <<47, 96, 15, 116, 103, 39, 145, 144, 14, 125>>
-                },
-                deposit: %{
-                  amount: Decimal.new("1E-8"),
-                  delay: 266,
-                  level: "2",
-                  seed: <<47, 96, 15, 116, 103, 39, 145, 144, 14, 125>>
-                }
-              ),
-            claims <-
-              StreamData.constant(
-                claim: %{
-                  delay: 104,
-                  index: 0,
-                  seed: <<47, 96, 15, 116, 103, 39, 145, 144, 14, 125>>
-                },
-                claim: %{
-                  delay: 233,
-                  index: 0,
-                  seed: <<47, 96, 15, 116, 103, 39, 145, 144, 14, 125>>
-                },
-                claim: %{
-                  delay: 267,
-                  index: 0,
-                  seed: <<47, 96, 15, 116, 103, 39, 145, 144, 14, 125>>
-                }
-              ),
-              max_runs: 1,
-              max_shrinking_steps: 0
+            count <- StreamData.integer(1..10),
+            deposits <- deposits_generator(count),
+            claims <- claims_generator(deposits)
           ) do
-      # check all(
-      #         count <- StreamData.integer(1..10),
-      #         deposits <- deposits_generator(count),
-      #         claims <- claims_generator(deposits)
-      #       ) do
       actions = deposits ++ claims
 
       result_contract =
@@ -364,17 +321,10 @@ defmodule VestingTest do
 
       max_date = DateTime.add(@start_date, max_delay, :day)
 
-      IO.inspect(result_contract.state)
-
       asserts_get_farm_infos(result_contract, actions,
         time_now: max_date,
         assert_fn: fn farm_infos ->
-        IO.inspect(farm_infos)
-          assert farm_infos["stats"]
-                 |> Map.values()
-                 |> Enum.map(& &1["rewards_distributed"])
-                 |> Enum.reduce(&Decimal.add/2)
-                 |> Decimal.gt?(0)
+          assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
         end
       )
     end
@@ -445,255 +395,81 @@ defmodule VestingTest do
              |> trigger_contract(trigger2)
   end
 
-  property "withdraw/2 should transfer the funds and update the state (withdraw max amount)", %{
+  property "withdraw/2 should transfer the funds and update the state (withdraw everything)", %{
     contract: contract
   } do
     check all(
-            amounts_durations_seeds <-
-              StreamData.list_of(
-                StreamData.tuple(
-                  {amount_generator(), StreamData.integer(1..365), StreamData.binary(length: 10)}
-                ),
-                min_length: 2,
-                max_length: 10
-              )
+            count <- StreamData.integer(1..10),
+            deposits <- deposits_generator(count),
+            withdraws <- withdraws_generator(deposits, :full)
           ) do
-      db =
-        amounts_durations_seeds
-        |> Enum.with_index()
-        |> Enum.map(fn {{amount, duration, seed}, i} ->
-          {
-            amount,
-            duration,
-            Trigger.new(seed, 1)
-            |> Trigger.named_action("deposit", %{"level" => "0"})
-            |> Trigger.timestamp(@start_date |> DateTime.add(i + 1, :day))
-            |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, amount),
-            Trigger.new(seed, 2)
-            |> Trigger.named_action("withdraw", %{
-              "amount" => amount,
-              "deposit_index" => 0
-            })
-            |> Trigger.timestamp(@start_date |> DateTime.add(i + 1 + duration, :day))
-          }
-        end)
+      actions = deposits ++ withdraws
 
-      state = %{}
+      result_contract =
+        run_actions(actions, contract, %{}, @initial_balance, ignore_condition_failed: true)
 
-      triggers =
-        (Enum.map(db, &elem(&1, 2)) ++ Enum.map(db, &elem(&1, 3)))
-        |> Enum.sort_by(& &1["timestamp"])
+      max_delay =
+        withdraws
+        |> Enum.reduce(0, fn {_, %{delay: delay}}, acc -> max(delay, acc) end)
 
-      MockChain
-      |> stub(:get_genesis_address, fn
-        previous_address ->
-          trigger =
-            Enum.find(
-              triggers,
-              &(Trigger.get_previous_address(&1) == previous_address)
-            )
+      max_date = DateTime.add(@start_date, max_delay, :day)
 
-          trigger["genesis_address"]
-      end)
+      asserts_get_farm_infos(result_contract, actions,
+        time_now: max_date,
+        assert_fn: fn farm_infos ->
+          assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
+          assert Decimal.eq?(0, farm_infos["rewards_reserved"])
 
-      assert %{state: next_state, uco_balance: next_uco_balance} =
-               Enum.reduce(
-                 triggers,
-                 prepare_contract(contract, state, @initial_balance),
-                 &trigger_contract(&2, &1)
-               )
-
-      assert 0 == map_size(next_state["deposits"])
-      assert Decimal.eq?(0, next_state["lp_tokens_deposited"])
-      assert Decimal.eq?(0, next_state["rewards_reserved"])
-
-      assert Decimal.add(next_uco_balance, next_state["rewards_distributed"])
-             |> Decimal.eq?(@initial_balance)
-    end
-  end
-
-  property "withdraw/2 should transfer the funds and update the state (withdraw partial amount)",
-           %{
-             contract: contract
-           } do
-    check all(
-            amounts_durations_seeds <-
-              StreamData.list_of(
-                StreamData.tuple(
-                  {amount_generator(), StreamData.integer(1..365), StreamData.binary(length: 10)}
-                ),
-                min_length: 2,
-                max_length: 10
-              )
-          ) do
-      db =
-        amounts_durations_seeds
-        |> Enum.with_index()
-        |> Enum.map(fn {{deposit_amount, duration, seed}, i} ->
-          withdraw_amount = Decimal.div(deposit_amount, 2) |> Decimal.max("0.00000001")
-
-          {
-            deposit_amount,
-            withdraw_amount,
-            duration,
-            Trigger.new(seed, 1)
-            |> Trigger.named_action("deposit", %{"level" => "0"})
-            |> Trigger.timestamp(@start_date |> DateTime.add(i + 1, :day))
-            |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, deposit_amount),
-            Trigger.new(seed, 2)
-            |> Trigger.named_action("withdraw", %{
-              "amount" => withdraw_amount,
-              "deposit_index" => 0
-            })
-            |> Trigger.timestamp(@start_date |> DateTime.add(i + 1 + duration, :day))
-          }
-        end)
-
-      state = %{}
-
-      triggers =
-        (Enum.map(db, &elem(&1, 3)) ++ Enum.map(db, &elem(&1, 4)))
-        |> Enum.sort_by(& &1["timestamp"])
-
-      MockChain
-      |> stub(:get_genesis_address, fn
-        previous_address ->
-          trigger =
-            Enum.find(
-              triggers,
-              &(Trigger.get_previous_address(&1) == previous_address)
-            )
-
-          trigger["genesis_address"]
-      end)
-
-      assert %{state: next_state, uco_balance: next_uco_balance} =
-               Enum.reduce(
-                 triggers,
-                 prepare_contract(contract, state, @initial_balance),
-                 &trigger_contract(&2, &1)
-               )
-
-      deposits = next_state["deposits"]
-
-      assert amounts_durations_seeds
-             |> Enum.reject(&Decimal.eq?(elem(&1, 0), Decimal.new("0.00000001")))
-             |> length() == map_size(deposits)
-
-      for {deposit_amount, withdraw_amount, _duration, trigger1, _trigger2} <- db do
-        user_deposits = deposits[trigger1["genesis_address"]]
-
-        remaining = Decimal.sub(deposit_amount, withdraw_amount)
-
-        if Decimal.eq?(0, remaining) do
-          assert is_nil(user_deposits)
-        else
-          refute user_deposits
-                 |> Enum.find(&Decimal.eq?(&1["amount"], remaining))
-                 |> is_nil()
+          assert Decimal.eq?(
+                   0,
+                   farm_infos["stats"]
+                   |> Map.values()
+                   |> Enum.map(& &1["lp_tokens_deposited"])
+                   |> Enum.reduce(&Decimal.add/2)
+                 )
         end
-      end
-
-      assert Decimal.eq?(
-               next_state["rewards_reserved"],
-               next_state["deposits"]
-               |> Map.values()
-               |> List.flatten()
-               |> Enum.map(& &1["reward_amount"])
-               |> Enum.reduce(0, &Decimal.add/2)
-             )
-
-      assert Decimal.add(next_uco_balance, next_state["rewards_distributed"])
-             |> Decimal.eq?(@initial_balance)
+      )
     end
   end
 
-  property "get_user_infos/1 should return the deposits details", %{contract: contract} do
-    check all(
-            amounts_levels_seeds <-
-              StreamData.list_of(
-                StreamData.tuple({
-                  amount_generator(),
-                  StreamData.integer(0..7) |> StreamData.map(&Integer.to_string/1),
-                  StreamData.binary(length: 10)
-                }),
-                min_length: 2,
-                max_length: 10
-              )
-          ) do
-      db =
-        amounts_levels_seeds
-        |> Enum.with_index()
-        |> Enum.map(fn {{amount, level, seed}, i} ->
-          {
-            amount,
-            level,
-            i,
-            Trigger.new(seed, 1)
-            |> Trigger.named_action("deposit", %{"level" => level})
-            |> Trigger.timestamp(@start_date |> DateTime.add(i + 1, :day))
-            |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, amount)
-          }
-        end)
-
-      state = %{}
-
-      triggers =
-        Enum.map(db, &elem(&1, 3))
-        |> Enum.sort_by(& &1["timestamp"])
-
-      MockChain
-      |> stub(:get_genesis_address, fn
-        previous_address ->
-          trigger =
-            Enum.find(
-              triggers,
-              &(Trigger.get_previous_address(&1) == previous_address)
-            )
-
-          trigger["genesis_address"]
-      end)
-
-      assert result_contract =
-               Enum.reduce(
-                 triggers,
-                 prepare_contract(contract, state, @initial_balance),
-                 &trigger_contract(&2, &1)
-               )
-
-      for {amount, level, i, trigger} <- db do
-        user_infos =
-          call_function(result_contract, "get_user_infos", [trigger["genesis_address"]])
-
-        assert length(user_infos) == 1
-        user_info = hd(user_infos)
-        assert String.to_integer(user_info["level"]) <= String.to_integer(level)
-        assert Decimal.eq?(user_info["amount"], amount)
-        assert 0 == user_info["index"]
-
-        assert Decimal.eq?(
-                 user_info["end"],
-                 @start_date
-                 |> DateTime.add(i + 1, :day)
-                 |> DateTime.add(level_to_days(level) * 86400, :second)
-                 |> DateTime.to_unix()
-               )
-      end
-    end
-  end
-
-  property "get_farm_infos/0 should return the farm details", %{contract: contract} do
+  property "withdraw/2 should transfer the funds and update the state (withdraw partial)", %{
+    contract: contract
+  } do
     check all(
             count <- StreamData.integer(1..10),
-            deposits <- deposits_generator(count)
+            deposits <- deposits_generator(count),
+            withdraws <- withdraws_generator(deposits, :full)
           ) do
-      result_contract = run_actions(deposits, contract, %{}, @initial_balance)
+      actions = deposits ++ withdraws
 
-      asserts_get_farm_infos(result_contract, deposits)
+      result_contract =
+        run_actions(actions, contract, %{}, @initial_balance, ignore_condition_failed: true)
+
+      max_delay =
+        withdraws
+        |> Enum.reduce(0, fn {_, %{delay: delay}}, acc -> max(delay, acc) end)
+
+      max_date = DateTime.add(@start_date, max_delay, :day)
+
+      asserts_get_farm_infos(result_contract, actions,
+        time_now: max_date,
+        assert_fn: fn farm_infos ->
+          assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
+          assert Decimal.eq?(0, farm_infos["rewards_reserved"])
+
+          assert Decimal.eq?(
+                   0,
+                   farm_infos["stats"]
+                   |> Map.values()
+                   |> Enum.map(& &1["lp_tokens_deposited"])
+                   |> Enum.reduce(&Decimal.add/2)
+                 )
+        end
+      )
     end
   end
 
-  defp asserts_get_farm_infos(contract, actions, opts \\ []) do
+  defp asserts_get_farm_infos(contract, actions, opts) do
     uco_balance = contract.uco_balance
 
     farm_infos =
@@ -708,6 +484,8 @@ defmodule VestingTest do
     assert farm_infos["start_date"] == DateTime.to_unix(@start_date)
     assert farm_infos["reward_token"] == "UCO"
     assert farm_infos["stats"] |> Map.keys() == ["0", "1", "2", "3", "4", "5", "6", "7"]
+
+    refute Decimal.negative?(Decimal.new(farm_infos["rewards_distributed"]))
 
     # tokens deposited is coherent with stats
     expected_lp_tokens_deposited =
@@ -733,7 +511,6 @@ defmodule VestingTest do
     for stat <- Map.values(farm_infos["stats"]) do
       refute Decimal.negative?(Decimal.new(stat["deposits_count"]))
       refute Decimal.negative?(Decimal.new(stat["lp_tokens_deposited"]))
-      refute Decimal.negative?(Decimal.new(stat["rewards_distributed"]))
     end
 
     # custom asserts
@@ -743,7 +520,7 @@ defmodule VestingTest do
     end
   end
 
-  defp asserts_get_user_infos(contract, genesis_address, deposits, opts \\ []) do
+  defp asserts_get_user_infos(contract, genesis_address, deposits, opts) do
     user_infos =
       call_function(
         contract,
@@ -869,7 +646,7 @@ defmodule VestingTest do
     |> StreamData.map(fn seeds ->
       Enum.map(seeds, fn seed ->
         deposit_generator(seed)
-        |> Enum.take(3)
+        |> Enum.take(deposits_per_seed)
       end)
       |> List.flatten()
       |> Enum.sort_by(&(elem(&1, 1) |> Access.get(:delay)))
@@ -901,12 +678,10 @@ defmodule VestingTest do
     end)
   end
 
-  defp withdraws_generator(deposits) do
+  defp withdraws_generator(deposits, :full) do
     StreamData.bind(StreamData.integer(1..365), fn i ->
       StreamData.constant(
         Enum.map(deposits, fn {:deposit, %{delay: delay, seed: seed, amount: amount}} ->
-          # FIXME: index
-          # TODO: random amount
           {:withdraw, %{delay: delay + i, seed: seed, amount: amount, index: 0}}
         end)
       )

@@ -395,14 +395,14 @@ export fun(get_farm_infos()) do
   deposits = State.get("deposits", Map.new())
 
   stats = Map.new()
-  stats = Map.set(stats, "0", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
-  stats = Map.set(stats, "1", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
-  stats = Map.set(stats, "2", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
-  stats = Map.set(stats, "3", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
-  stats = Map.set(stats, "4", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
-  stats = Map.set(stats, "5", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
-  stats = Map.set(stats, "6", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
-  stats = Map.set(stats, "7", lp_tokens_deposited: 0, rewards_distributed: 0, deposits_count: 0)
+  stats = Map.set(stats, "0", lp_tokens_deposited: 0, deposits_count: 0)
+  stats = Map.set(stats, "1", lp_tokens_deposited: 0, deposits_count: 0)
+  stats = Map.set(stats, "2", lp_tokens_deposited: 0, deposits_count: 0)
+  stats = Map.set(stats, "3", lp_tokens_deposited: 0, deposits_count: 0)
+  stats = Map.set(stats, "4", lp_tokens_deposited: 0, deposits_count: 0)
+  stats = Map.set(stats, "5", lp_tokens_deposited: 0, deposits_count: 0)
+  stats = Map.set(stats, "6", lp_tokens_deposited: 0, deposits_count: 0)
+  stats = Map.set(stats, "7", lp_tokens_deposited: 0, deposits_count: 0)
 
   for user_genesis in Map.keys(deposits) do
     user_deposits = Map.get(deposits, user_genesis)
@@ -446,7 +446,6 @@ export fun(get_farm_infos()) do
 
       stats_for_level = Map.get(stats, level)
       lp_tokens_deposited_for_level = Map.get(stats_for_level, "lp_tokens_deposited")
-      rewards_distributed_for_level = Map.get(stats_for_level, "rewards_distributed")
       deposits_count_for_level = Map.get(stats_for_level, "deposits_count")
 
       stats_for_level =
@@ -454,13 +453,6 @@ export fun(get_farm_infos()) do
           stats_for_level,
           "lp_tokens_deposited",
           lp_tokens_deposited_for_level + user_deposit.amount
-        )
-
-      stats_for_level =
-        Map.set(
-          stats_for_level,
-          "rewards_distributed",
-          rewards_distributed_for_level + user_deposit.reward_amount
         )
 
       stats_for_level =
@@ -480,6 +472,7 @@ export fun(get_farm_infos()) do
     start_date: @START_DATE,
     end_date: @END_DATE,
     remaining_rewards: remaining_rewards,
+    rewards_distributed: State.get("rewards_distributed", 0),
     rewards_reserved: State.get("rewards_reserved", 0),
     stats: stats
   ]
