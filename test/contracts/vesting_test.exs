@@ -497,10 +497,19 @@ defmodule VestingTest do
         {:claim, _}, acc -> acc
       end)
 
-    assert farm_infos["stats"]
+    total_lp_tokens_deposited = farm_infos["stats"]
            |> Map.values()
            |> Enum.reduce(0, &Decimal.add(&1["lp_tokens_deposited"], &2))
-           |> Decimal.eq?(expected_lp_tokens_deposited)
+
+    assert Decimal.eq?(expected_lp_tokens_deposited, total_lp_tokens_deposited)
+
+    # sum of tvl_ratio should be 1 (requires at least 1 deposit)
+    if Decimal.positive?(total_lp_tokens_deposited) do
+      assert farm_infos["stats"]
+             |> Map.values()
+             |> Enum.reduce(0, &Decimal.add(&1["tvl_ratio"], &2))
+             |> Decimal.gt?(Decimal.new("0.9999")) # close enough of 1
+    end
 
     # remaining_rewards & rewards_reserved are coherent
     assert Decimal.eq?(
@@ -511,7 +520,6 @@ defmodule VestingTest do
     # stats are there
     for stat <- Map.values(farm_infos["stats"]) do
       refute Decimal.negative?(Decimal.new(stat["deposits_count"]))
-      refute Decimal.negative?(Decimal.new(stat["lp_tokens_deposited"]))
     end
 
     # custom asserts
