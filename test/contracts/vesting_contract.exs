@@ -404,44 +404,30 @@ export fun(get_farm_infos()) do
   stats = Map.set(stats, "6", lp_tokens_deposited: 0, deposits_count: 0)
   stats = Map.set(stats, "7", lp_tokens_deposited: 0, deposits_count: 0)
 
+  levels = Map.new()
+  levels = Map.set(levels, "0", now + 0)
+  levels = Map.set(levels, "1", now + 7 * day)
+  levels = Map.set(levels, "2", now + 30 * day)
+  levels = Map.set(levels, "3", now + 90 * day)
+  levels = Map.set(levels, "4", now + 180 * day)
+  levels = Map.set(levels, "5", now + 365 * day)
+  levels = Map.set(levels, "6", now + 730 * day)
+  levels = Map.set(levels, "7", now + 1095 * day)
+
   for user_genesis in Map.keys(deposits) do
     user_deposits = Map.get(deposits, user_genesis)
 
     for user_deposit in user_deposits do
-      remaining_lock_time = user_deposit.end - now
-
       level = nil
 
-      if remaining_lock_time <= 0 do
-        level = "0"
-      end
+      for l in Map.keys(levels) do
+        if level == nil do
+          until = Map.get(levels, l)
 
-      if level == nil && remaining_lock_time <= 7 * day do
-        level = "1"
-      end
-
-      if level == nil && remaining_lock_time <= 30 * day do
-        level = "2"
-      end
-
-      if level == nil && remaining_lock_time <= 90 * day do
-        level = "3"
-      end
-
-      if level == nil && remaining_lock_time <= 180 * day do
-        level = "4"
-      end
-
-      if level == nil && remaining_lock_time <= 365 * day do
-        level = "5"
-      end
-
-      if level == nil && remaining_lock_time <= 730 * day do
-        level = "6"
-      end
-
-      if level == nil do
-        level = "7"
+          if user_deposit.end <= until do
+            level = l
+          end
+        end
       end
 
       stats_for_level = Map.get(stats, level)
@@ -474,6 +460,7 @@ export fun(get_farm_infos()) do
     remaining_rewards: remaining_rewards,
     rewards_distributed: State.get("rewards_distributed", 0),
     rewards_reserved: State.get("rewards_reserved", 0),
+    available_levels: levels,
     stats: stats
   ]
 end
@@ -491,7 +478,6 @@ export fun(get_user_infos(user_genesis_address)) do
 
   for user_deposit in user_deposits do
     remaining_lock_time = user_deposit.end - now
-
 
     level = nil
 
@@ -574,18 +560,18 @@ fun delete_at(list, index) do
   list2
 end
 
-export fun(available_levels()) do
+fun available_levels() do
   now = Time.now()
 
   day = 86400
-  map = Map.new()
-  map = Map.set(map, "0", now + 0)
-  map = Map.set(map, "1", now + 7 * day)
-  map = Map.set(map, "2", now + 30 * day)
-  map = Map.set(map, "3", now + 90 * day)
-  map = Map.set(map, "4", now + 180 * day)
-  map = Map.set(map, "5", now + 365 * day)
-  map = Map.set(map, "6", now + 730 * day)
-  map = Map.set(map, "7", now + 1095 * day)
-  map
+  levels = Map.new()
+  levels = Map.set(levels, "0", now + 0)
+  levels = Map.set(levels, "1", now + 7 * day)
+  levels = Map.set(levels, "2", now + 30 * day)
+  levels = Map.set(levels, "3", now + 90 * day)
+  levels = Map.set(levels, "4", now + 180 * day)
+  levels = Map.set(levels, "5", now + 365 * day)
+  levels = Map.set(levels, "6", now + 730 * day)
+  levels = Map.set(levels, "7", now + 1095 * day)
+  levels
 end

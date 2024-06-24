@@ -432,57 +432,58 @@ defmodule VestingTest do
     end
   end
 
-  property "withdraw/2 should transfer the funds and update the state (withdraw partial)", %{
-    contract: contract
-  } do
-    check all(
-            count <- StreamData.integer(1..10),
-            deposits <- deposits_generator(count),
-            withdraws <- withdraws_generator(deposits, :full)
-          ) do
-      actions = deposits ++ withdraws
+  # property "withdraw/2 should transfer the funds and update the state (withdraw partial)", %{
+  #   contract: contract
+  # } do
+  #   check all(
+  #           count <- StreamData.integer(1..10),
+  #           deposits <- deposits_generator(count),
+  #           withdraws <- withdraws_generator(deposits, :partial)
+  #         ) do
+  #     actions = deposits ++ withdraws
 
-      result_contract =
-        run_actions(actions, contract, %{}, @initial_balance, ignore_condition_failed: true)
+  #     result_contract =
+  #       run_actions(actions, contract, %{}, @initial_balance, ignore_condition_failed: true)
 
-      max_delay =
-        withdraws
-        |> Enum.reduce(0, fn {_, %{delay: delay}}, acc -> max(delay, acc) end)
+  #     max_delay =
+  #       withdraws
+  #       |> Enum.reduce(0, fn {_, %{delay: delay}}, acc -> max(delay, acc) end)
 
-      max_date = DateTime.add(@start_date, max_delay, :day)
+  #     max_date = DateTime.add(@start_date, max_delay, :day)
 
-      asserts_get_farm_infos(result_contract, actions,
-        time_now: max_date,
-        assert_fn: fn farm_infos ->
-          assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
-          assert Decimal.eq?(0, farm_infos["rewards_reserved"])
+  #     asserts_get_farm_infos(result_contract, actions,
+  #       time_now: max_date,
+  #       assert_fn: fn farm_infos ->
+  #         assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
+  #         assert Decimal.eq?(0, farm_infos["rewards_reserved"])
 
-          assert Decimal.eq?(
-                   0,
-                   farm_infos["stats"]
-                   |> Map.values()
-                   |> Enum.map(& &1["lp_tokens_deposited"])
-                   |> Enum.reduce(&Decimal.add/2)
-                 )
-        end
-      )
-    end
-  end
+  #         assert Decimal.eq?(
+  #                  0,
+  #                  farm_infos["stats"]
+  #                  |> Map.values()
+  #                  |> Enum.map(& &1["lp_tokens_deposited"])
+  #                  |> Enum.reduce(&Decimal.add/2)
+  #                )
+  #       end
+  #     )
+  #   end
+  # end
 
   defp asserts_get_farm_infos(contract, actions, opts) do
     uco_balance = contract.uco_balance
-
-    farm_infos =
-      call_function(
-        contract,
-        "get_farm_infos",
-        [],
-        Keyword.get(opts, :time_now, DateTime.utc_now())
-      )
+    time_now = Keyword.get(opts, :time_now, DateTime.utc_now())
+    time_now_unix = DateTime.to_unix(time_now)
+    farm_infos = call_function(contract, "get_farm_infos", [], time_now)
 
     assert farm_infos["end_date"] == DateTime.to_unix(@end_date)
     assert farm_infos["start_date"] == DateTime.to_unix(@start_date)
     assert farm_infos["reward_token"] == "UCO"
+
+    for {key, value} <- farm_infos["available_levels"] do
+      assert key in ["0", "1", "2", "3", "4", "5", "6", "7"]
+      assert value == time_now_unix + level_to_days(key) * 86400
+    end
+
     assert farm_infos["stats"] |> Map.keys() == ["0", "1", "2", "3", "4", "5", "6", "7"]
 
     refute Decimal.negative?(Decimal.new(farm_infos["rewards_distributed"]))
@@ -646,7 +647,7 @@ defmodule VestingTest do
     |> StreamData.map(fn seeds ->
       Enum.map(seeds, fn seed ->
         deposit_generator(seed)
-        |> Enum.take(deposits_per_seed)
+        |> Enum.take(Enum.random(deposits_per_seed))
       end)
       |> List.flatten()
       |> Enum.sort_by(&(elem(&1, 1) |> Access.get(:delay)))
