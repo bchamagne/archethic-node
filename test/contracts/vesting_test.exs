@@ -497,18 +497,31 @@ defmodule VestingTest do
         {:claim, _}, acc -> acc
       end)
 
-    total_lp_tokens_deposited = farm_infos["stats"]
-           |> Map.values()
-           |> Enum.reduce(0, &Decimal.add(&1["lp_tokens_deposited"], &2))
+    total_lp_tokens_deposited =
+      farm_infos["stats"]
+      |> Map.values()
+      |> Enum.reduce(0, &Decimal.add(&1["lp_tokens_deposited"], &2))
 
     assert Decimal.eq?(expected_lp_tokens_deposited, total_lp_tokens_deposited)
 
-    # sum of tvl_ratio should be 1 (requires at least 1 deposit)
     if Decimal.positive?(total_lp_tokens_deposited) do
+      # sum of tvl_ratio is equal to 1
       assert farm_infos["stats"]
              |> Map.values()
              |> Enum.reduce(0, &Decimal.add(&1["tvl_ratio"], &2))
-             |> Decimal.gt?(Decimal.new("0.9999")) # close enough of 1
+             # we can't compare directly because the ratio are not precise
+             |> Decimal.gt?(Decimal.new("0.9999"))
+
+      # sum of rewards_allocated is equal to uco_balance
+      assert farm_infos["stats"]
+             |> Map.values()
+             |> Enum.reduce(0, &Decimal.add(&1["rewards_allocated"], &2))
+             |> then(fn total_rewards_allocated ->
+               # we can't compare directly because the ratio are not precise
+               Decimal.div(uco_balance, total_rewards_allocated)
+               |> Decimal.round()
+               |> Decimal.eq?(1)
+             end)
     end
 
     # remaining_rewards & rewards_reserved are coherent

@@ -396,14 +396,14 @@ export fun get_farm_infos() do
   lp_tokens_deposited = State.get("lp_tokens_deposited", 0)
 
   stats = Map.new()
-  stats = Map.set(stats, "0", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0)
-  stats = Map.set(stats, "1", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0)
-  stats = Map.set(stats, "2", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0)
-  stats = Map.set(stats, "3", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0)
-  stats = Map.set(stats, "4", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0)
-  stats = Map.set(stats, "5", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0)
-  stats = Map.set(stats, "6", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0)
-  stats = Map.set(stats, "7", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0)
+  stats = Map.set(stats, "0", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
+  stats = Map.set(stats, "1", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
+  stats = Map.set(stats, "2", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
+  stats = Map.set(stats, "3", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
+  stats = Map.set(stats, "4", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
+  stats = Map.set(stats, "5", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
+  stats = Map.set(stats, "6", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
+  stats = Map.set(stats, "7", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
 
   available_levels = Map.new()
   available_levels = Map.set(available_levels, "0", now + 0)
@@ -438,6 +438,7 @@ export fun get_farm_infos() do
 
       stats_for_level = Map.set(stats_for_level, "lp_tokens_deposited", lp_tokens_deposited_for_level)
       stats_for_level = Map.set(stats_for_level, "tvl_ratio", tvl_ratio)
+      stats_for_level = Map.set(stats_for_level, "rewards_allocated", tvl_ratio * reward_token_balance)
       stats_for_level = Map.set(stats_for_level, "deposits_count", deposits_count_for_level)
       stats = Map.set(stats, level, stats_for_level)
     end
