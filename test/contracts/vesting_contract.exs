@@ -386,10 +386,10 @@ export fun(get_farm_infos()) do
     reward_token_balance = Map.get(contract.balance.tokens, key, 0)
   end
 
-  remaining_reward = nil
+  remaining_rewards = nil
 
   if reward_token_balance != nil do
-    remaining_reward = reward_token_balance - State.get("rewards_reserved", 0)
+    remaining_rewards = reward_token_balance - State.get("rewards_reserved", 0)
   end
 
   deposits = State.get("deposits", Map.new())
@@ -412,35 +412,35 @@ export fun(get_farm_infos()) do
 
       level = nil
 
-      if remaining_lock_time < 0 do
+      if remaining_lock_time <= 0 do
         level = "0"
       end
 
-      if level == nil && remaining_lock_time < 7 * day do
+      if level == nil && remaining_lock_time <= 7 * day do
         level = "1"
       end
 
-      if level == nil && remaining_lock_time < 30 * day do
+      if level == nil && remaining_lock_time <= 30 * day do
         level = "2"
       end
 
-      if level == nil && remaining_lock_time < 90 * day do
+      if level == nil && remaining_lock_time <= 90 * day do
         level = "3"
       end
 
-      if level == nil && remaining_lock_time < 180 * day do
+      if level == nil && remaining_lock_time <= 180 * day do
         level = "4"
       end
 
-      if level == nil && remaining_lock_time < 365 * day do
+      if level == nil && remaining_lock_time <= 365 * day do
         level = "5"
       end
 
-      if level == nil && remaining_lock_time < 730 * day do
+      if level == nil && remaining_lock_time <= 730 * day do
         level = "6"
       end
 
-      if level == nil && remaining_lock_time < 1095 * day do
+      if level == nil do
         level = "7"
       end
 
@@ -479,7 +479,8 @@ export fun(get_farm_infos()) do
     reward_token: @REWARD_TOKEN,
     start_date: @START_DATE,
     end_date: @END_DATE,
-    remaining_reward: remaining_reward,
+    remaining_rewards: remaining_rewards,
+    rewards_reserved: State.get("rewards_reserved", 0),
     stats: stats
   ]
 end
@@ -498,37 +499,38 @@ export fun(get_user_infos(user_genesis_address)) do
   for user_deposit in user_deposits do
     remaining_lock_time = user_deposit.end - now
 
+
     level = nil
 
-    if remaining_lock_time < 0 do
+    if remaining_lock_time <= 0 do
       level = "0"
     end
 
-    if level == nil && remaining_lock_time < 7 * day do
+    if level == nil && remaining_lock_time <= 7 * day do
       level = "1"
     end
 
-    if level == nil && remaining_lock_time < 30 * day do
+    if level == nil && remaining_lock_time <= 30 * day do
       level = "2"
     end
 
-    if level == nil && remaining_lock_time < 90 * day do
+    if level == nil && remaining_lock_time <= 90 * day do
       level = "3"
     end
 
-    if level == nil && remaining_lock_time < 180 * day do
+    if level == nil && remaining_lock_time <= 180 * day do
       level = "4"
     end
 
-    if level == nil && remaining_lock_time < 365 * day do
+    if level == nil && remaining_lock_time <= 365 * day do
       level = "5"
     end
 
-    if level == nil && remaining_lock_time < 730 * day do
+    if level == nil && remaining_lock_time <= 730 * day do
       level = "6"
     end
 
-    if level == nil && remaining_lock_time < 1095 * day do
+    if level == nil do
       level = "7"
     end
 
@@ -537,8 +539,7 @@ export fun(get_user_infos(user_genesis_address)) do
       amount: user_deposit.amount,
       reward_amount: user_deposit.reward_amount,
       end: user_deposit.end,
-      level: level,
-      max_level: "7"
+      level: level
     ]
 
     reply = List.append(reply, info)
