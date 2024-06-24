@@ -30,13 +30,14 @@ defmodule VestingTest do
     {:ok, %{contract: create_contract(@code, constants)}}
   end
 
-  test "deposit/1 should throw when it is past farm's end", %{contract: contract} do
+  test "deposit/1 should throw when farm ended", %{contract: contract} do
     state = %{}
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{"level" => "0"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
       |> Trigger.timestamp(@end_date |> DateTime.add(1))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
     assert {:throw, 1001} =
              contract
@@ -44,12 +45,13 @@ defmodule VestingTest do
              |> trigger_contract(trigger)
   end
 
+
   test "deposit/1 should throw when it's transfer to the farm is 0", %{contract: contract} do
     state = %{}
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{"level" => "0"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
       |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(0))
 
@@ -64,7 +66,7 @@ defmodule VestingTest do
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{"level" => "0"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
       |> Trigger.timestamp(@start_date)
 
     assert {:throw, 1003} =
@@ -80,7 +82,7 @@ defmodule VestingTest do
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{"level" => "0"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
       |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@invalid_address, 0, @farm_address, Decimal.new(100))
 
@@ -90,22 +92,22 @@ defmodule VestingTest do
              |> trigger_contract(trigger)
   end
 
-  test "deposit/1 should throw when level is invalid", %{
-    contract: contract
-  } do
-    state = %{}
 
-    trigger =
-      Trigger.new()
-      |> Trigger.named_action("deposit", %{"level" => "-1"})
-      |> Trigger.timestamp(@start_date)
-      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(100))
+  test "deposit/1 should throw when end_timestamp is past farm's ended", %{contract: contract} do
+      state = %{}
 
-    assert {:throw, 1005} =
-             contract
-             |> prepare_contract(state)
-             |> trigger_contract(trigger)
-  end
+      trigger =
+        Trigger.new()
+        |> Trigger.named_action("deposit", %{"end_timestamp" => @end_date |> DateTime.add(1) |> DateTime.to_unix() })
+        |> Trigger.timestamp(@start_date)
+        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(100))
+
+      assert {:throw, 1005} =
+               contract
+               |> prepare_contract(state)
+               |> trigger_contract(trigger)
+    end
+
 
   property "deposit/1 should accept deposits if the farm hasn't started yet (1 user)", %{
     contract: contract
@@ -259,7 +261,7 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"level" => "0"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -283,7 +285,7 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"level" => "0"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -352,7 +354,7 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"level" => "0"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -376,7 +378,7 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"level" => "0"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -615,22 +617,24 @@ defmodule VestingTest do
       index = Map.get(index_acc, seed, 1)
       index_acc = Map.put(index_acc, seed, index + 1)
 
+      timestamp = @start_date |> DateTime.add(payload.delay, :day)
+
       trigger =
         case action do
           :deposit ->
             Trigger.new(payload.seed, index)
-            |> Trigger.timestamp(@start_date |> DateTime.add(payload.delay, :day))
-            |> Trigger.named_action("deposit", %{"level" => payload.level})
+            |> Trigger.timestamp(timestamp)
+            |> Trigger.named_action("deposit", %{"end_timestamp" => DateTime.to_unix(timestamp) + (level_to_days(payload.level) * 86400)})
             |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, payload.amount)
 
           :claim ->
             Trigger.new(payload.seed, index)
-            |> Trigger.timestamp(@start_date |> DateTime.add(payload.delay, :day))
+            |> Trigger.timestamp(timestamp)
             |> Trigger.named_action("claim", %{"deposit_index" => payload.index})
 
           :withdraw ->
             Trigger.new(payload.seed, index)
-            |> Trigger.timestamp(@start_date |> DateTime.add(payload.delay, :day))
+            |> Trigger.timestamp(timestamp)
             |> Trigger.named_action("withdraw", %{
               "amount" => payload.amount,
               "deposit_index" => payload.index

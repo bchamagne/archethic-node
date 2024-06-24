@@ -1,22 +1,26 @@
 @version 1
 
-condition triggered_by: transaction, on: deposit(level) do
+condition triggered_by: transaction, on: deposit(end_timestamp) do
   if transaction.timestamp >= @END_DATE do
     throw(message: "deposit impossible once farm is closed", code: 1001)
+  end
+
+  if end_timestamp != "max" && end_timestamp > @END_DATE do
+    throw(message: "deposit's end cannot be greater than farm's end", code: 1005)
   end
 
   if get_user_transfer_amount() <= 0 do
     throw(message: "deposit's amount must greater than 0", code: 1002)
   end
 
-  if !List.in?(Map.keys(available_levels()), level) do
-    throw(message: "deposit's level is invalid", code: 1005)
-  end
-
   true
 end
 
-actions triggered_by: transaction, on: deposit(level) do
+actions triggered_by: transaction, on: deposit(end_timestamp) do
+  if end_timestamp == "max" do
+    end_timestamp = @END_DATE
+  end
+
   transfer_amount = get_user_transfer_amount()
 
   previous_address = Chain.get_previous_address(transaction)
@@ -33,8 +37,7 @@ actions triggered_by: transaction, on: deposit(level) do
     deposits = State.get("deposits", Map.new())
   end
 
-  end_by_level = available_levels()
-  current_deposit = [amount: transfer_amount, reward_amount: 0, end: Map.get(end_by_level, level)]
+  current_deposit = [amount: transfer_amount, reward_amount: 0, end: end_timestamp]
 
   user_deposits = Map.get(deposits, user_genesis_address, [])
   user_deposits = List.append(user_deposits, current_deposit)
@@ -458,51 +461,36 @@ export fun get_farm_infos() do
 end
 
 export fun get_user_infos(user_genesis_address) do
+  now = Time.now()
+  day = 86400
+  reply = []
+
   user_genesis_address = String.to_hex(user_genesis_address)
+
+  available_levels = Map.new()
+  available_levels = Map.set(available_levels, "0", now + 0)
+  available_levels = Map.set(available_levels, "1", now + 7 * day)
+  available_levels = Map.set(available_levels, "2", now + 30 * day)
+  available_levels = Map.set(available_levels, "3", now + 90 * day)
+  available_levels = Map.set(available_levels, "4", now + 180 * day)
+  available_levels = Map.set(available_levels, "5", now + 365 * day)
+  available_levels = Map.set(available_levels, "6", now + 730 * day)
+  available_levels = Map.set(available_levels, "7", now + 1095 * day)
 
   deposits = State.get("deposits", Map.new())
   user_deposits = Map.get(deposits, user_genesis_address, [])
 
-  reply = []
   i = 0
-  now = Time.now()
-  day = 86400
-
   for user_deposit in user_deposits do
-    remaining_lock_time = user_deposit.end - now
-
     level = nil
+    for l in Map.keys(available_levels) do
+      if level == nil do
+        until = Map.get(available_levels, l)
 
-    if remaining_lock_time <= 0 do
-      level = "0"
-    end
-
-    if level == nil && remaining_lock_time <= 7 * day do
-      level = "1"
-    end
-
-    if level == nil && remaining_lock_time <= 30 * day do
-      level = "2"
-    end
-
-    if level == nil && remaining_lock_time <= 90 * day do
-      level = "3"
-    end
-
-    if level == nil && remaining_lock_time <= 180 * day do
-      level = "4"
-    end
-
-    if level == nil && remaining_lock_time <= 365 * day do
-      level = "5"
-    end
-
-    if level == nil && remaining_lock_time <= 730 * day do
-      level = "6"
-    end
-
-    if level == nil do
-      level = "7"
+        if user_deposit.end <= until do
+          level = l
+        end
+      end
     end
 
     info = [
@@ -550,20 +538,4 @@ fun delete_at(list, index) do
   end
 
   list2
-end
-
-fun available_levels() do
-  now = Time.now()
-
-  day = 86400
-  levels = Map.new()
-  levels = Map.set(levels, "0", now + 0)
-  levels = Map.set(levels, "1", now + 7 * day)
-  levels = Map.set(levels, "2", now + 30 * day)
-  levels = Map.set(levels, "3", now + 90 * day)
-  levels = Map.set(levels, "4", now + 180 * day)
-  levels = Map.set(levels, "5", now + 365 * day)
-  levels = Map.set(levels, "6", now + 730 * day)
-  levels = Map.set(levels, "7", now + 1095 * day)
-  levels
 end
