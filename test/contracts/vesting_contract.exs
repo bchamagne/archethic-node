@@ -454,7 +454,6 @@ export fun get_farm_infos() do
     end_date: @END_DATE,
     remaining_rewards: remaining_rewards,
     rewards_distributed: State.get("rewards_distributed", 0),
-    rewards_reserved: State.get("rewards_reserved", 0),
     available_levels: available_levels,
     stats: stats
   ]

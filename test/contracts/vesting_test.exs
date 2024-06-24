@@ -45,7 +45,6 @@ defmodule VestingTest do
              |> trigger_contract(trigger)
   end
 
-
   test "deposit/1 should throw when it's transfer to the farm is 0", %{contract: contract} do
     state = %{}
 
@@ -92,22 +91,22 @@ defmodule VestingTest do
              |> trigger_contract(trigger)
   end
 
-
   test "deposit/1 should throw when end_timestamp is past farm's ended", %{contract: contract} do
-      state = %{}
+    state = %{}
 
-      trigger =
-        Trigger.new()
-        |> Trigger.named_action("deposit", %{"end_timestamp" => @end_date |> DateTime.add(1) |> DateTime.to_unix() })
-        |> Trigger.timestamp(@start_date)
-        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(100))
+    trigger =
+      Trigger.new()
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" => @end_date |> DateTime.add(1) |> DateTime.to_unix()
+      })
+      |> Trigger.timestamp(@start_date)
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(100))
 
-      assert {:throw, 1005} =
-               contract
-               |> prepare_contract(state)
-               |> trigger_contract(trigger)
-    end
-
+    assert {:throw, 1005} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger)
+  end
 
   property "deposit/1 should accept deposits if the farm hasn't started yet (1 user)", %{
     contract: contract
@@ -125,19 +124,12 @@ defmodule VestingTest do
         |> elem(1)
         |> Access.get(:seed)
 
-      max_delay =
-        deposits
-        |> Enum.reduce(0, fn {:deposit, %{delay: delay}}, acc -> max(delay, acc) end)
-
-      max_date = DateTime.add(@start_date, max_delay, :day)
-
       {genesis_public_key, _} = Crypto.derive_keypair(user_seed, 0)
       genesis_address = Crypto.derive_address(genesis_public_key) |> Base.encode16()
 
       result_contract = run_actions(deposits, contract, %{}, @initial_balance)
 
       asserts_get_user_infos(result_contract, genesis_address, deposits,
-        time_now: max_date,
         assert_fn: fn user_infos ->
           # also assert that no rewards calculated
           assert Decimal.eq?(
@@ -162,20 +154,12 @@ defmodule VestingTest do
           {:deposit, %{payload | delay: -1}}
         end)
 
-      max_delay =
-        deposits
-        |> Enum.reduce(0, fn {:deposit, %{delay: delay}}, acc -> max(delay, acc) end)
-
-      max_date = DateTime.add(@start_date, max_delay, :day)
-
       result_contract = run_actions(deposits, contract, %{}, @initial_balance)
 
       asserts_get_farm_infos(result_contract, deposits,
-        time_now: max_date,
         assert_fn: fn farm_infos ->
           # also assert that no rewards calculated
           assert farm_infos["remaining_rewards"] == @initial_balance
-          assert farm_infos["rewards_reserved"] == 0
         end
       )
     end
@@ -191,18 +175,12 @@ defmodule VestingTest do
         |> elem(1)
         |> Access.get(:seed)
 
-      max_delay =
-        deposits
-        |> Enum.reduce(0, fn {:deposit, %{delay: delay}}, acc -> max(delay, acc) end)
-
-      max_date = DateTime.add(@start_date, max_delay, :day)
-
       {genesis_public_key, _} = Crypto.derive_keypair(user_seed, 0)
       genesis_address = Crypto.derive_address(genesis_public_key) |> Base.encode16()
 
       result_contract = run_actions(deposits, contract, %{}, @initial_balance)
 
-      asserts_get_user_infos(result_contract, genesis_address, deposits, time_now: max_date)
+      asserts_get_user_infos(result_contract, genesis_address, deposits)
     end
   end
 
@@ -213,15 +191,9 @@ defmodule VestingTest do
             count <- StreamData.integer(1..10),
             deposits <- deposits_generator(count)
           ) do
-      max_delay =
-        deposits
-        |> Enum.reduce(0, fn {:deposit, %{delay: delay}}, acc -> max(delay, acc) end)
-
-      max_date = DateTime.add(@start_date, max_delay, :day)
-
       result_contract = run_actions(deposits, contract, %{}, @initial_balance)
 
-      asserts_get_farm_infos(result_contract, deposits, time_now: max_date)
+      asserts_get_farm_infos(result_contract, deposits)
     end
   end
 
@@ -317,14 +289,7 @@ defmodule VestingTest do
       result_contract =
         run_actions(actions, contract, %{}, @initial_balance, ignore_condition_failed: true)
 
-      max_delay =
-        claims
-        |> Enum.reduce(0, fn {:claim, %{delay: delay}}, acc -> max(delay, acc) end)
-
-      max_date = DateTime.add(@start_date, max_delay, :day)
-
       asserts_get_farm_infos(result_contract, actions,
-        time_now: max_date,
         assert_fn: fn farm_infos ->
           assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
         end
@@ -410,17 +375,9 @@ defmodule VestingTest do
       result_contract =
         run_actions(actions, contract, %{}, @initial_balance, ignore_condition_failed: true)
 
-      max_delay =
-        withdraws
-        |> Enum.reduce(0, fn {_, %{delay: delay}}, acc -> max(delay, acc) end)
-
-      max_date = DateTime.add(@start_date, max_delay, :day)
-
       asserts_get_farm_infos(result_contract, actions,
-        time_now: max_date,
         assert_fn: fn farm_infos ->
           assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
-          assert Decimal.eq?(0, farm_infos["rewards_reserved"])
 
           assert Decimal.eq?(
                    0,
@@ -471,10 +428,24 @@ defmodule VestingTest do
   #   end
   # end
 
-  defp asserts_get_farm_infos(contract, actions, opts) do
+  defp asserts_get_farm_infos(contract, actions, opts \\ []) do
     uco_balance = contract.uco_balance
-    time_now = Keyword.get(opts, :time_now, DateTime.utc_now())
+
+    time_now =
+      case Keyword.get(opts, :time_now) do
+        nil ->
+          max_delay =
+            actions
+            |> Enum.reduce(0, fn {_, %{delay: delay}}, acc -> max(delay, acc) end)
+
+          DateTime.add(@start_date, max_delay, :day)
+
+        datetime ->
+          datetime
+      end
+
     time_now_unix = DateTime.to_unix(time_now)
+
     farm_infos = call_function(contract, "get_farm_infos", [], time_now)
 
     assert farm_infos["end_date"] == DateTime.to_unix(@end_date)
@@ -483,7 +454,7 @@ defmodule VestingTest do
 
     for {key, value} <- farm_infos["available_levels"] do
       assert key in ["0", "1", "2", "3", "4", "5", "6", "7"]
-      assert value == time_now_unix + level_to_days(key) * 86400
+      assert value == time_now_unix + level_to_seconds(key)
     end
 
     assert farm_infos["stats"] |> Map.keys() == ["0", "1", "2", "3", "4", "5", "6", "7"]
@@ -526,9 +497,14 @@ defmodule VestingTest do
              end)
     end
 
-    # remaining_rewards & rewards_reserved are coherent
+    # remaining_rewards subtracts the reserved rewards
+    rewards_reserved = contract.state["deposits"]
+           |> Map.values()
+           |> List.flatten()
+           |> Enum.reduce(0, &Decimal.add(&1["reward_amount"], &2))
+
     assert Decimal.eq?(
-             Decimal.sub(uco_balance, farm_infos["rewards_reserved"]),
+             Decimal.sub(uco_balance, rewards_reserved),
              farm_infos["remaining_rewards"]
            )
 
@@ -544,16 +520,29 @@ defmodule VestingTest do
     end
   end
 
-  defp asserts_get_user_infos(contract, genesis_address, deposits, opts) do
+  defp asserts_get_user_infos(contract, genesis_address, actions, opts \\ []) do
+    time_now =
+      case Keyword.get(opts, :time_now) do
+        nil ->
+          max_delay =
+            actions
+            |> Enum.reduce(0, fn {_, %{delay: delay}}, acc -> max(delay, acc) end)
+
+          DateTime.add(@start_date, max_delay, :day)
+
+        datetime ->
+          datetime
+      end
+
     user_infos =
       call_function(
         contract,
         "get_user_infos",
         [genesis_address],
-        Keyword.get(opts, :time_now, DateTime.utc_now())
+        time_now
       )
 
-    for {{:deposit, deposit}, i} <- Enum.with_index(deposits) do
+    for {{:deposit, deposit}, i} <- Enum.with_index(actions) do
       user_info = Enum.at(user_infos, i)
 
       # index is present
@@ -565,7 +554,7 @@ defmodule VestingTest do
       # end is calculated by the initial_level
       assert @start_date
              |> DateTime.add(deposit.delay, :day)
-             |> DateTime.add(level_to_days(deposit.level) * 86400, :second)
+             |> DateTime.add(level_to_seconds(deposit.level), :second)
              |> DateTime.to_unix() == user_info["end"]
 
       # level is <= initial_level
@@ -624,7 +613,9 @@ defmodule VestingTest do
           :deposit ->
             Trigger.new(payload.seed, index)
             |> Trigger.timestamp(timestamp)
-            |> Trigger.named_action("deposit", %{"end_timestamp" => DateTime.to_unix(timestamp) + (level_to_days(payload.level) * 86400)})
+            |> Trigger.named_action("deposit", %{
+              "end_timestamp" => DateTime.to_unix(timestamp) + level_to_seconds(payload.level)
+            })
             |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, payload.amount)
 
           :claim ->
@@ -714,12 +705,12 @@ defmodule VestingTest do
     end)
   end
 
-  defp level_to_days("0"), do: 0
-  defp level_to_days("1"), do: 7
-  defp level_to_days("2"), do: 30
-  defp level_to_days("3"), do: 90
-  defp level_to_days("4"), do: 180
-  defp level_to_days("5"), do: 365
-  defp level_to_days("6"), do: 730
-  defp level_to_days("7"), do: 1095
+  defp level_to_seconds("0"), do: 0 * 86400
+  defp level_to_seconds("1"), do: 7 * 86400
+  defp level_to_seconds("2"), do: 30 * 86400
+  defp level_to_seconds("3"), do: 90 * 86400
+  defp level_to_seconds("4"), do: 180 * 86400
+  defp level_to_seconds("5"), do: 365 * 86400
+  defp level_to_seconds("6"), do: 730 * 86400
+  defp level_to_seconds("7"), do: 1095 * 86400
 end
