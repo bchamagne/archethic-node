@@ -108,25 +108,23 @@ defmodule VestingTest do
              |> trigger_contract(trigger)
   end
 
-  property "deposit/1 should accept deposits if the farm hasn't started yet (1 user)", %{
+  property "deposit/1 should accept deposits if the farm hasn't started yet", %{
     contract: contract
   } do
-    check all(deposits <- deposits_generator(1)) do
-      deposits =
-        deposits
-        |> Enum.map(fn {:deposit, payload} ->
-          {:deposit, %{payload | delay: -1}}
-        end)
-
-      user_seed =
-        deposits
-        |> hd()
-        |> elem(1)
-        |> Access.get(:seed)
-
+    check all(
+            count <- StreamData.integer(1..10),
+            deposits <-
+              deposits_generator(count)
+              |> StreamData.map(fn deposits ->
+                Enum.map(deposits, fn {:deposit, payload} ->
+                  {:deposit, %{payload | delay: -1}}
+                end)
+              end),
+            {:deposit, deposit} <- StreamData.member_of(deposits)
+          ) do
       result_contract = run_actions(deposits, contract, %{}, @initial_balance)
 
-      asserts_get_user_infos(result_contract, user_seed, deposits,
+      asserts_get_user_infos(result_contract, deposit.seed, deposits,
         assert_fn: fn user_infos ->
           # also assert that no rewards calculated
           assert Decimal.eq?(
@@ -135,23 +133,6 @@ defmodule VestingTest do
                  )
         end
       )
-    end
-  end
-
-  property "deposit/1 should accept deposits if the farm hasn't started yet (many users)", %{
-    contract: contract
-  } do
-    check all(
-            count <- StreamData.integer(1..10),
-            deposits <- deposits_generator(count)
-          ) do
-      deposits =
-        deposits
-        |> Enum.map(fn {:deposit, payload} ->
-          {:deposit, %{payload | delay: -1}}
-        end)
-
-      result_contract = run_actions(deposits, contract, %{}, @initial_balance)
 
       asserts_get_farm_infos(result_contract, deposits,
         assert_fn: fn farm_infos ->
@@ -162,31 +143,16 @@ defmodule VestingTest do
     end
   end
 
-  property "deposit/1 should accept deposits if the farm has started (1 user)", %{
-    contract: contract
-  } do
-    check all(deposits <- deposits_generator(1)) do
-      user_seed =
-        deposits
-        |> hd()
-        |> elem(1)
-        |> Access.get(:seed)
-
-      result_contract = run_actions(deposits, contract, %{}, @initial_balance)
-
-      asserts_get_user_infos(result_contract, user_seed, deposits)
-    end
-  end
-
-  property "deposit/1 should accept deposits if the farm has started (many users)", %{
+  property "deposit/1 should accept deposits if the farm has started", %{
     contract: contract
   } do
     check all(
             count <- StreamData.integer(1..10),
-            deposits <- deposits_generator(count)
+            deposits <- deposits_generator(count),
+            {:deposit, deposit} <- StreamData.member_of(deposits)
           ) do
       result_contract = run_actions(deposits, contract, %{}, @initial_balance)
-
+      asserts_get_user_infos(result_contract, deposit.seed, deposits)
       asserts_get_farm_infos(result_contract, deposits)
     end
   end
@@ -276,16 +242,26 @@ defmodule VestingTest do
     check all(
             count <- StreamData.integer(1..10),
             deposits <- deposits_generator(count),
-            claims <- claims_generator(deposits)
+            {:deposit, deposit} <- StreamData.member_of(deposits)
           ) do
-      actions = deposits ++ claims
+      claim =
+        {:claim,
+         %{delay: deposit.delay + 1, seed: deposit.seed, deposit_index: deposit.deposit_index}}
+
+      actions = deposits ++ [claim]
 
       result_contract =
         run_actions(actions, contract, %{}, @initial_balance, ignore_condition_failed: true)
 
+      asserts_get_user_infos(result_contract, deposit.seed, actions)
+
       asserts_get_farm_infos(result_contract, actions,
         assert_fn: fn farm_infos ->
-          assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
+          # there's an edge case where the rewards_distributed can be 0
+          # it happens with small deposits amount that generate less than 1e-8 rewards
+          if Decimal.gt?(deposit.amount, 1) do
+            assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
+          end
         end
       )
     end
@@ -368,6 +344,8 @@ defmodule VestingTest do
 
       result_contract = run_actions(actions, contract, %{}, @initial_balance)
 
+      # TODO: assert user_info amount = 0
+
       asserts_get_farm_infos(result_contract, actions,
         assert_fn: fn farm_infos ->
           assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
@@ -384,44 +362,37 @@ defmodule VestingTest do
     end
   end
 
-  # property "withdraw/2 should transfer the funds and update the state (withdraw partial)", %{
-  #   contract: contract
-  # } do
-  #   check all(
-  #           count <- StreamData.integer(1..10),
-  #           deposits <- deposits_generator(count),
-  #           withdraws <- withdraws_generator(deposits, :partial)
-  #         ) do
-  #     actions = deposits ++ withdraws
+  property "withdraw/2 should transfer the funds and update the state (partial withdraw)", %{
+    contract: contract
+  } do
+    check all(
+            count <- StreamData.integer(1..10),
+            deposits <- deposits_generator(count, min_amount: 0.0000001),
+            {:deposit, deposit} <- StreamData.member_of(deposits)
+          ) do
+      withdraw_amount = Decimal.div(deposit.amount, 2) |> Decimal.round(8)
 
-  #     result_contract =
-  #       run_actions(actions, contract, %{}, @initial_balance, ignore_condition_failed: true)
+      withdraw =
+        {:withdraw,
+         %{
+           delay: deposit.delay + 1,
+           seed: deposit.seed,
+           amount: withdraw_amount,
+           deposit_index: deposit.deposit_index
+         }}
 
-  #     max_delay =
-  #       withdraws
-  #       |> Enum.reduce(0, fn {_, %{delay: delay}}, acc -> max(delay, acc) end)
+      actions = deposits ++ [withdraw]
 
-  #     max_date = DateTime.add(@start_date, max_delay, :day)
+      result_contract = run_actions(actions, contract, %{}, @initial_balance)
 
-  #     asserts_get_farm_infos(result_contract, actions,
-  #       time_now: max_date,
-  #       assert_fn: fn farm_infos ->
-  #         assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
-  #         assert Decimal.eq?(0, farm_infos["rewards_reserved"])
-
-  #         assert Decimal.eq?(
-  #                  0,
-  #                  farm_infos["stats"]
-  #                  |> Map.values()
-  #                  |> Enum.map(& &1["lp_tokens_deposited"])
-  #                  |> Enum.reduce(&Decimal.add/2)
-  #                )
-  #       end
-  #     )
-  #   end
-  # end
-  #
-  #
+      asserts_get_user_infos(result_contract, deposit.seed, actions,
+        assert_fn: fn user_infos ->
+          d = user_infos |> Enum.at(deposit.deposit_index)
+          assert Decimal.eq?(d["amount"], Decimal.sub(deposit.amount, withdraw_amount))
+        end
+      )
+    end
+  end
 
   test "relock/2 should throw if user has no deposit", %{contract: contract} do
     state = %{}
@@ -880,9 +851,12 @@ defmodule VestingTest do
     |> Enum.reverse()
   end
 
-  defp amount_generator() do
+  defp amount_generator(opts) do
     # no need to generate a number bigger than 2 ** 64
-    StreamData.float(min: 0.00000001, max: 18_446_744_073_709_551_615.0)
+    StreamData.float(
+      min: Keyword.get(opts, :min_amount, 0.00000001),
+      max: Keyword.get(opts, :max_amount, 18_446_744_073_709_551_615.0)
+    )
     |> StreamData.map(&Decimal.from_float/1)
     |> StreamData.map(&Decimal.round(&1, 8))
   end
@@ -900,12 +874,12 @@ defmodule VestingTest do
     StreamData.binary(length: 10)
   end
 
-  defp deposits_generator(seeds_count, deposits_per_seed \\ 1..4) do
+  defp deposits_generator(seeds_count, opts \\ []) do
     StreamData.list_of(seed_generator(), length: seeds_count)
     |> StreamData.map(fn seeds ->
       Enum.map(seeds, fn seed ->
-        deposit_generator(seed)
-        |> Enum.take(Enum.random(deposits_per_seed))
+        deposit_generator(seed, opts)
+        |> Enum.take(Keyword.get(opts, :deposits_per_seed, 3))
         |> Enum.sort_by(&(elem(&1, 1) |> Access.get(:delay)))
         |> Enum.with_index()
         |> Enum.map(fn {{:deposit, deposit}, i} ->
@@ -917,8 +891,8 @@ defmodule VestingTest do
     end)
   end
 
-  defp deposit_generator(seed) do
-    {delay_generator(), StreamData.constant(seed), amount_generator(), level_generator()}
+  defp deposit_generator(seed, opts) do
+    {delay_generator(), StreamData.constant(seed), amount_generator(opts), level_generator()}
     |> StreamData.tuple()
     |> StreamData.map(fn {delay, seed, amount, level} ->
       {:deposit,
@@ -931,25 +905,13 @@ defmodule VestingTest do
     end)
   end
 
-  defp claims_generator(deposits) do
-    StreamData.bind(StreamData.integer(1..365), fn i ->
-      StreamData.constant(
-        Enum.map(deposits, fn {:deposit, %{delay: delay, seed: seed}} ->
-          # FIXME: index
-          {:claim, %{delay: delay + i, seed: seed, deposit_index: 0}}
-        end)
-      )
-    end)
-  end
-
   defp withdraws_generator(deposits, :full) do
-    StreamData.bind(StreamData.integer(1..365), fn i ->
-      StreamData.constant(
-        Enum.map(deposits, fn {:deposit, %{delay: delay, seed: seed, amount: amount}} ->
-          {:withdraw, %{delay: delay + i, seed: seed, amount: amount, deposit_index: 0}}
-        end)
-      )
-    end)
+    StreamData.constant(
+      Enum.map(deposits, fn {:deposit, d} ->
+        # index will always be 0 because it's sorted by delay
+        {:withdraw, %{delay: d.delay + 1, seed: d.seed, amount: d.amount, deposit_index: 0}}
+      end)
+    )
   end
 
   defp level_to_seconds("0"), do: 0 * 86400
