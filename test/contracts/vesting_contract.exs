@@ -1,11 +1,15 @@
 @version 1
 
 condition triggered_by: transaction, on: deposit(end_timestamp) do
+  if end_timestamp == "max" do
+    end_timestamp = @END_DATE
+  end
+
   if transaction.timestamp >= @END_DATE do
     throw(message: "deposit impossible once farm is closed", code: 1001)
   end
 
-  if end_timestamp != "max" && end_timestamp > @END_DATE do
+  if end_timestamp > @END_DATE do
     throw(message: "deposit's end cannot be greater than farm's end", code: 1005)
   end
 
@@ -23,8 +27,7 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
 
   transfer_amount = get_user_transfer_amount()
 
-  previous_address = Chain.get_previous_address(transaction)
-  user_genesis_address = Chain.get_genesis_address(previous_address)
+  user_genesis_address = get_user_genesis(transaction)
 
   deposits = nil
 
@@ -51,34 +54,25 @@ end
 
 condition triggered_by: transaction, on: claim(deposit_index) do
   if transaction.timestamp <= @START_DATE do
-    throw(message: "claim impossible if farm has no started", code: 2000)
+    throw(message: "farm is not started yet", code: 2001)
   end
 
-  previous_address = Chain.get_previous_address(transaction)
-  genesis_address = Chain.get_genesis_address(previous_address)
+  user_genesis_address = get_user_genesis(transaction)
+  user_deposit = get_user_deposit(user_genesis_address, deposit_index)
 
-  deposits = State.get("deposits", Map.new())
-  user_deposits = Map.get(deposits, genesis_address, [])
-  user_deposits_size = List.size(user_deposits)
-
-  if user_deposits_size == 0 do
-    throw(message: "user has no claim", code: 2001)
-  end
-
-  if user_deposits_size < deposit_index + 1 do
-    throw(message: "invalid index", code: 2002)
+  if user_deposit == nil do
+    throw(message: "deposit not found", code: 2000)
   end
 
   res = calculate_new_rewards()
-  user_deposits = Map.get(res.deposits, genesis_address)
+  user_deposits = Map.get(res.deposits, user_genesis_address)
   user_deposit = List.at(user_deposits, deposit_index)
 
   user_deposit.reward_amount > 0
 end
 
 actions triggered_by: transaction, on: claim(deposit_index) do
-  previous_address = Chain.get_previous_address(transaction)
-  user_genesis_address = Chain.get_genesis_address(previous_address)
+  user_genesis_address = get_user_genesis(transaction)
 
   res = calculate_new_rewards()
   deposits = res.deposits
@@ -112,22 +106,12 @@ actions triggered_by: transaction, on: claim(deposit_index) do
 end
 
 condition triggered_by: transaction, on: withdraw(amount, deposit_index) do
-  previous_address = Chain.get_previous_address(transaction)
-  genesis_address = Chain.get_genesis_address(previous_address)
+  user_genesis_address = get_user_genesis(transaction)
+  user_deposit = get_user_deposit(user_genesis_address, deposit_index)
 
-  deposits = State.get("deposits", Map.new())
-  user_deposits = Map.get(deposits, genesis_address, [])
-  user_deposits_size = List.size(user_deposits)
-
-  if user_deposits_size == 0 do
-    throw(message: "user has no deposit", code: 3001)
+  if user_deposit == nil do
+    throw(message: "deposit not found", code: 3000)
   end
-
-  if user_deposits_size < deposit_index + 1 do
-    throw(message: "invalid index", code: 3002)
-  end
-
-  user_deposit = List.at(user_deposits, deposit_index)
 
   if amount > user_deposit.amount do
     throw(message: "amount requested is greater than amount deposited", code: 3003)
@@ -137,8 +121,7 @@ condition triggered_by: transaction, on: withdraw(amount, deposit_index) do
 end
 
 actions triggered_by: transaction, on: withdraw(amount, deposit_index) do
-  previous_address = Chain.get_previous_address(transaction)
-  user_genesis_address = Chain.get_genesis_address(previous_address)
+  user_genesis_address = get_user_genesis(transaction)
 
   deposits = nil
   rewards_reserved = 0
@@ -207,19 +190,11 @@ condition triggered_by: transaction, on: relock(end_timestamp, deposit_index) do
     end_timestamp = @END_DATE
   end
 
-  previous_address = Chain.get_previous_address(transaction)
-  genesis_address = Chain.get_genesis_address(previous_address)
+  user_genesis_address = get_user_genesis(transaction)
+  user_deposit = get_user_deposit(user_genesis_address, deposit_index)
 
-  deposits = State.get("deposits", Map.new())
-  user_deposits = Map.get(deposits, genesis_address, [])
-  user_deposits_size = List.size(user_deposits)
-
-  if user_deposits_size == 0 do
-    throw(message: "user has no deposit", code: 4000)
-  end
-
-  if user_deposits_size < deposit_index + 1 do
-    throw(message: "invalid index", code: 4001)
+  if user_deposit == nil do
+    throw(message: "deposit not found", code: 4000)
   end
 
   if transaction.timestamp >= @END_DATE do
@@ -230,8 +205,6 @@ condition triggered_by: transaction, on: relock(end_timestamp, deposit_index) do
     throw(message: "relock's end cannot be past farm's end", code: 4003)
   end
 
-  user_deposit = List.at(user_deposits, deposit_index)
-
   if user_deposit["end"] >= end_timestamp do
     throw(message: "relock's end cannot be inferior or equal to deposit's end", code: 4004)
   end
@@ -240,6 +213,9 @@ condition triggered_by: transaction, on: relock(end_timestamp, deposit_index) do
 end
 
 actions triggered_by: transaction, on: relock(end_timestamp, deposit_index) do
+  if end_timestamp == "max" do
+    end_timestamp = @END_DATE
+  end
 end
 
 condition(
@@ -611,6 +587,17 @@ export fun(get_user_infos(user_genesis_address)) do
   end
 
   reply
+end
+
+fun get_user_genesis(transaction) do
+  previous_address = Chain.get_previous_address(transaction)
+  Chain.get_genesis_address(previous_address)
+end
+
+fun get_user_deposit(user_genesis_address, deposit_index) do
+  deposits = State.get("deposits", Map.new())
+  user_deposits = Map.get(deposits, user_genesis_address, [])
+  List.at(user_deposits, deposit_index)
 end
 
 fun set_at(list, index, value) do

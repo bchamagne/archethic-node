@@ -205,7 +205,7 @@ defmodule VestingTest do
       |> Trigger.named_action("claim", %{"deposit_index" => 0})
       |> Trigger.timestamp(@start_date |> DateTime.add(-1))
 
-    assert {:throw, 2000} =
+    assert {:throw, 2001} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger)
@@ -222,7 +222,7 @@ defmodule VestingTest do
     MockChain
     |> expect(:get_genesis_address, fn _ -> trigger["genesis_address"] end)
 
-    assert {:throw, 2001} =
+    assert {:throw, 2000} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger)
@@ -245,7 +245,7 @@ defmodule VestingTest do
     MockChain
     |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
 
-    assert {:throw, 2002} =
+    assert {:throw, 2000} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger1)
@@ -308,7 +308,7 @@ defmodule VestingTest do
     MockChain
     |> expect(:get_genesis_address, fn _ -> trigger["genesis_address"] end)
 
-    assert {:throw, 3001} =
+    assert {:throw, 3000} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger)
@@ -331,7 +331,7 @@ defmodule VestingTest do
     MockChain
     |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
 
-    assert {:throw, 3002} =
+    assert {:throw, 3000} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger1)
@@ -464,7 +464,7 @@ defmodule VestingTest do
     MockChain
     |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
 
-    assert {:throw, 4001} =
+    assert {:throw, 4000} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger1)
