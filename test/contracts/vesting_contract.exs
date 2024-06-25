@@ -93,15 +93,12 @@ actions triggered_by: transaction, on: claim(deposit_index) do
 
   rewards_distributed = State.get("rewards_distributed", 0)
   State.set("rewards_distributed", rewards_distributed + user_deposit.reward_amount)
-
   State.set("rewards_reserved", res.rewards_reserved - user_deposit.reward_amount)
 
   user_deposit = Map.set(user_deposit, "reward_amount", 0)
-
   user_deposits = set_at(user_deposits, deposit_index, user_deposit)
 
   deposits = Map.set(deposits, user_genesis_address, user_deposits)
-
   State.set("deposits", deposits)
 end
 
@@ -216,6 +213,38 @@ actions triggered_by: transaction, on: relock(end_timestamp, deposit_index) do
   if end_timestamp == "max" do
     end_timestamp = @END_DATE
   end
+
+  user_genesis_address = get_user_genesis(transaction)
+
+  res = calculate_new_rewards()
+  deposits = res.deposits
+  State.set("last_calculation_timestamp", res.last_calculation_timestamp)
+
+  user_deposits = Map.get(deposits, user_genesis_address)
+  user_deposit = List.at(user_deposits, deposit_index)
+
+  if user_deposit.reward_amount > 0 do
+    if @REWARD_TOKEN == "UCO" do
+      Contract.add_uco_transfer(to: transaction.address, amount: user_deposit.reward_amount)
+    else
+      Contract.add_token_transfer(
+        to: transaction.address,
+        amount: user_deposit.reward_amount,
+        token_address: @REWARD_TOKEN
+      )
+    end
+  end
+
+  rewards_distributed = State.get("rewards_distributed", 0)
+  State.set("rewards_distributed", rewards_distributed + user_deposit.reward_amount)
+  State.set("rewards_reserved", res.rewards_reserved - user_deposit.reward_amount)
+
+  user_deposit = Map.set(user_deposit, "reward_amount", 0)
+  user_deposit = Map.set(user_deposit, "end", end_timestamp)
+  user_deposits = set_at(user_deposits, deposit_index, user_deposit)
+
+  deposits = Map.set(deposits, user_genesis_address, user_deposits)
+  State.set("deposits", deposits)
 end
 
 condition(
@@ -506,6 +535,10 @@ export fun(get_farm_infos()) do
         end
       end
 
+      if level == nil do
+        level = "7"
+      end
+
       stats_for_level = Map.get(stats, level)
 
       lp_tokens_deposited_for_level =
@@ -572,6 +605,10 @@ export fun(get_user_infos(user_genesis_address)) do
           level = l
         end
       end
+    end
+
+    if level == nil do
+      level = "7"
     end
 
     info = [

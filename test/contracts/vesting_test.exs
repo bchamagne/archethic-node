@@ -124,12 +124,9 @@ defmodule VestingTest do
         |> elem(1)
         |> Access.get(:seed)
 
-      {genesis_public_key, _} = Crypto.derive_keypair(user_seed, 0)
-      genesis_address = Crypto.derive_address(genesis_public_key) |> Base.encode16()
-
       result_contract = run_actions(deposits, contract, %{}, @initial_balance)
 
-      asserts_get_user_infos(result_contract, genesis_address, deposits,
+      asserts_get_user_infos(result_contract, user_seed, deposits,
         assert_fn: fn user_infos ->
           # also assert that no rewards calculated
           assert Decimal.eq?(
@@ -175,12 +172,9 @@ defmodule VestingTest do
         |> elem(1)
         |> Access.get(:seed)
 
-      {genesis_public_key, _} = Crypto.derive_keypair(user_seed, 0)
-      genesis_address = Crypto.derive_address(genesis_public_key) |> Base.encode16()
-
       result_contract = run_actions(deposits, contract, %{}, @initial_balance)
 
-      asserts_get_user_infos(result_contract, genesis_address, deposits)
+      asserts_get_user_infos(result_contract, user_seed, deposits)
     end
   end
 
@@ -372,8 +366,7 @@ defmodule VestingTest do
           ) do
       actions = deposits ++ withdraws
 
-      result_contract =
-        run_actions(actions, contract, %{}, @initial_balance, ignore_condition_failed: true)
+      result_contract = run_actions(actions, contract, %{}, @initial_balance)
 
       asserts_get_farm_infos(result_contract, actions,
         assert_fn: fn farm_infos ->
@@ -580,6 +573,41 @@ defmodule VestingTest do
              |> trigger_contract(trigger2)
   end
 
+  property "relock/2 should transfer the rewards and update the state", %{
+    contract: contract
+  } do
+    check all(
+            count <- StreamData.integer(1..10),
+            deposits <- deposits_generator(count),
+            {:deposit, deposit_to_relock} <- StreamData.member_of(deposits)
+          ) do
+      relock = %{
+        delay: deposit_to_relock.delay + 1,
+        seed: deposit_to_relock.seed,
+        end_timestamp: "max",
+        deposit_index: deposit_to_relock.deposit_index
+      }
+
+      actions = deposits ++ [{:relock, relock}]
+
+      result_contract = run_actions(actions, contract, %{}, @initial_balance)
+
+      asserts_get_farm_infos(result_contract, actions)
+
+      asserts_get_user_infos(result_contract, relock.seed, actions,
+        assert_fn: fn user_infos ->
+          deposit = Enum.at(user_infos, relock.deposit_index)
+
+          if relock.end_timestamp == "max" do
+            assert deposit["end"] == @end_date |> DateTime.to_unix()
+          else
+            assert deposit["end"] == relock.end_timestamp
+          end
+        end
+      )
+    end
+  end
+
   defp asserts_get_farm_infos(contract, actions, opts \\ []) do
     uco_balance = contract.uco_balance
 
@@ -619,6 +647,7 @@ defmodule VestingTest do
       |> Enum.reduce(0, fn
         {:deposit, %{amount: amount}}, acc -> Decimal.add(acc, amount)
         {:withdraw, %{amount: amount}}, acc -> Decimal.sub(acc, amount)
+        {:relock, _}, acc -> acc
         {:claim, _}, acc -> acc
       end)
 
@@ -656,8 +685,14 @@ defmodule VestingTest do
       |> List.flatten()
       |> Enum.reduce(0, &Decimal.add(&1["reward_amount"], &2))
 
+    # rewards_reserved may not exist (if there are only deposits when farm is not started)
+    if contract.state["rewards_reserved"] do
+      assert Decimal.eq?(rewards_reserved, contract.state["rewards_reserved"])
+    end
+
     assert Decimal.eq?(
-             Decimal.sub(uco_balance, rewards_reserved),
+             uco_balance
+             |> Decimal.sub(rewards_reserved),
              farm_infos["remaining_rewards"]
            )
 
@@ -673,7 +708,14 @@ defmodule VestingTest do
     end
   end
 
-  defp asserts_get_user_infos(contract, genesis_address, actions, opts \\ []) do
+  defp asserts_get_user_infos(contract, user_seed, actions, opts \\ []) do
+    {genesis_public_key, _} = Crypto.derive_keypair(user_seed, 0)
+    genesis_address = Crypto.derive_address(genesis_public_key) |> Base.encode16()
+
+    expected_state =
+      actions_to_expected_state(actions)
+      |> Enum.filter(&(&1.seed == user_seed))
+
     time_now =
       case Keyword.get(opts, :time_now) do
         nil ->
@@ -695,32 +737,27 @@ defmodule VestingTest do
         time_now
       )
 
-    for {{:deposit, deposit}, i} <- Enum.with_index(actions) do
-      user_info = Enum.at(user_infos, i)
+    for %{index: index, amount: amount, end_timestamp: end_timestamp} <- expected_state do
+      end_timestamp =
+        if end_timestamp == "max" do
+          @end_date |> DateTime.to_unix()
+        else
+          end_timestamp
+        end
 
-      # index is present
-      assert i == user_info["index"]
+      user_info = Enum.at(user_infos, index)
 
-      # amount is the same
-      assert Decimal.eq?(deposit.amount, user_info["amount"])
-
-      # end is calculated by the initial_level
-      assert @start_date
-             |> DateTime.add(deposit.delay, :day)
-             |> DateTime.add(level_to_seconds(deposit.level), :second)
-             |> DateTime.to_unix() == user_info["end"]
-
-      # level is <= initial_level
-      assert String.to_integer(user_info["level"]) <= String.to_integer(deposit.level)
-
-      # reward amount is >= 0
+      assert index == user_info["index"]
+      assert end_timestamp == user_info["end"]
+      assert Decimal.eq?(amount, user_info["amount"])
       assert Decimal.compare(user_info["reward_amount"], 0) in [:eq, :gt]
+      assert end_to_level(end_timestamp, time_now) == user_info["level"]
+    end
 
-      # custom asserts
-      case Keyword.get(opts, :assert_fn) do
-        nil -> :ok
-        fun -> fun.(user_infos)
-      end
+    # custom asserts
+    case Keyword.get(opts, :assert_fn) do
+      nil -> :ok
+      fun -> fun.(user_infos)
     end
   end
 
@@ -753,6 +790,50 @@ defmodule VestingTest do
     )
   end
 
+  defp actions_to_expected_state(actions) do
+    actions
+    |> Enum.sort_by(&elem(&1, 1).delay)
+    |> Enum.reduce(%{}, fn {action, payload}, acc ->
+      user_deposits = Map.get(acc, payload.seed, [])
+
+      user_deposits =
+        case action do
+          :deposit ->
+            end_timestamp =
+              @start_date
+              |> DateTime.add(payload.delay, :day)
+              |> DateTime.add(level_to_seconds(payload.level), :second)
+              |> DateTime.to_unix()
+
+            deposit = %{
+              seed: payload.seed,
+              amount: payload.amount,
+              end_timestamp: end_timestamp,
+              index: length(user_deposits)
+            }
+
+            user_deposits ++ [deposit]
+
+          :claim ->
+            user_deposits
+
+          :withdraw ->
+            List.update_at(user_deposits, payload.deposit_index, fn d ->
+              Map.update!(d, :amount, &Decimal.sub(&1, payload.amount))
+            end)
+
+          :relock ->
+            List.update_at(user_deposits, payload.deposit_index, fn d ->
+              Map.put(d, :end_timestamp, payload.end_timestamp)
+            end)
+        end
+
+      Map.put(acc, payload.seed, user_deposits)
+    end)
+    |> Map.values()
+    |> List.flatten()
+  end
+
   defp actions_to_triggers(actions) do
     Enum.reduce(actions, {%{}, []}, fn {action, payload}, {index_acc, triggers_acc} ->
       seed = payload.seed
@@ -774,14 +855,22 @@ defmodule VestingTest do
           :claim ->
             Trigger.new(payload.seed, index)
             |> Trigger.timestamp(timestamp)
-            |> Trigger.named_action("claim", %{"deposit_index" => payload.index})
+            |> Trigger.named_action("claim", %{"deposit_index" => payload.deposit_index})
 
           :withdraw ->
             Trigger.new(payload.seed, index)
             |> Trigger.timestamp(timestamp)
             |> Trigger.named_action("withdraw", %{
               "amount" => payload.amount,
-              "deposit_index" => payload.index
+              "deposit_index" => payload.deposit_index
+            })
+
+          :relock ->
+            Trigger.new(payload.seed, index)
+            |> Trigger.timestamp(timestamp)
+            |> Trigger.named_action("relock", %{
+              "end_timestamp" => payload.end_timestamp,
+              "deposit_index" => payload.deposit_index
             })
         end
 
@@ -817,6 +906,11 @@ defmodule VestingTest do
       Enum.map(seeds, fn seed ->
         deposit_generator(seed)
         |> Enum.take(Enum.random(deposits_per_seed))
+        |> Enum.sort_by(&(elem(&1, 1) |> Access.get(:delay)))
+        |> Enum.with_index()
+        |> Enum.map(fn {{:deposit, deposit}, i} ->
+          {:deposit, Map.put(deposit, :deposit_index, i)}
+        end)
       end)
       |> List.flatten()
       |> Enum.sort_by(&(elem(&1, 1) |> Access.get(:delay)))
@@ -842,7 +936,7 @@ defmodule VestingTest do
       StreamData.constant(
         Enum.map(deposits, fn {:deposit, %{delay: delay, seed: seed}} ->
           # FIXME: index
-          {:claim, %{delay: delay + i, seed: seed, index: 0}}
+          {:claim, %{delay: delay + i, seed: seed, deposit_index: 0}}
         end)
       )
     end)
@@ -852,7 +946,7 @@ defmodule VestingTest do
     StreamData.bind(StreamData.integer(1..365), fn i ->
       StreamData.constant(
         Enum.map(deposits, fn {:deposit, %{delay: delay, seed: seed, amount: amount}} ->
-          {:withdraw, %{delay: delay + i, seed: seed, amount: amount, index: 0}}
+          {:withdraw, %{delay: delay + i, seed: seed, amount: amount, deposit_index: 0}}
         end)
       )
     end)
@@ -866,4 +960,17 @@ defmodule VestingTest do
   defp level_to_seconds("5"), do: 365 * 86400
   defp level_to_seconds("6"), do: 730 * 86400
   defp level_to_seconds("7"), do: 1095 * 86400
+
+  defp end_to_level(end_timestamp, time_now) do
+    case end_timestamp |> DateTime.from_unix!() |> DateTime.diff(time_now) do
+      diff when diff > 730 * 86400 -> "7"
+      diff when diff > 365 * 86400 -> "6"
+      diff when diff > 180 * 86400 -> "5"
+      diff when diff > 90 * 86400 -> "4"
+      diff when diff > 30 * 86400 -> "3"
+      diff when diff > 7 * 86400 -> "2"
+      diff when diff > 0 -> "1"
+      _ -> "0"
+    end
+  end
 end
