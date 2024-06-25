@@ -427,6 +427,158 @@ defmodule VestingTest do
   #     )
   #   end
   # end
+  #
+  #
+
+  test "relock/2 should throw if user has no deposit", %{contract: contract} do
+    state = %{}
+
+    trigger =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("relock", %{"end_timestamp" => "max", "deposit_index" => 0})
+      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+
+    MockChain
+    |> expect(:get_genesis_address, 2, fn _ -> trigger["genesis_address"] end)
+
+    assert {:throw, 4000} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger)
+  end
+
+  test "relock/2 should throw if index is invalid", %{contract: contract} do
+    state = %{}
+
+    trigger1 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("deposit", %{"end_timestamp" => DateTime.to_unix(@start_date)})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+    trigger2 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("relock", %{"end_timestamp" => "max", "deposit_index" => 50})
+      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+
+    MockChain
+    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+
+    assert {:throw, 4001} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger1)
+             |> trigger_contract(trigger2)
+  end
+
+  test "relock/2 should throw if relock is done after farm's end", %{contract: contract} do
+    state = %{}
+
+    trigger1 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("deposit", %{"end_timestamp" => @start_date |> DateTime.to_unix()})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+    trigger2 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("relock", %{
+        "end_timestamp" => "max",
+        "deposit_index" => 0
+      })
+      |> Trigger.timestamp(@end_date |> DateTime.add(1))
+
+    MockChain
+    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+
+    assert {:throw, 4002} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger1)
+             |> trigger_contract(trigger2)
+  end
+
+  test "relock/2 should throw if end_timestamp is past farm's end", %{contract: contract} do
+    state = %{}
+
+    trigger1 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("deposit", %{"end_timestamp" => @start_date |> DateTime.to_unix()})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+    trigger2 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("relock", %{
+        "end_timestamp" => @end_date |> DateTime.add(1) |> DateTime.to_unix(),
+        "deposit_index" => 0
+      })
+      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+
+    MockChain
+    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+
+    assert {:throw, 4003} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger1)
+             |> trigger_contract(trigger2)
+  end
+
+  test "relock/2 should throw if end_timestamp is before previous deposit's end", %{
+    contract: contract
+  } do
+    state = %{}
+
+    trigger1 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("deposit", %{"end_timestamp" => @start_date |> DateTime.to_unix()})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+    trigger2 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("relock", %{
+        "end_timestamp" => @start_date |> DateTime.add(-1) |> DateTime.to_unix(),
+        "deposit_index" => 0
+      })
+      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+
+    MockChain
+    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+
+    assert {:throw, 4004} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger1)
+             |> trigger_contract(trigger2)
+  end
+
+  test "relock/2 should throw if end_timestamp is equal to previous deposit's end", %{
+    contract: contract
+  } do
+    state = %{}
+
+    trigger1 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+    trigger2 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("relock", %{"end_timestamp" => "max", "deposit_index" => 0})
+      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+
+    MockChain
+    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+
+    assert {:throw, 4004} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger1)
+             |> trigger_contract(trigger2)
+  end
 
   defp asserts_get_farm_infos(contract, actions, opts \\ []) do
     uco_balance = contract.uco_balance
@@ -498,10 +650,11 @@ defmodule VestingTest do
     end
 
     # remaining_rewards subtracts the reserved rewards
-    rewards_reserved = contract.state["deposits"]
-           |> Map.values()
-           |> List.flatten()
-           |> Enum.reduce(0, &Decimal.add(&1["reward_amount"], &2))
+    rewards_reserved =
+      contract.state["deposits"]
+      |> Map.values()
+      |> List.flatten()
+      |> Enum.reduce(0, &Decimal.add(&1["reward_amount"], &2))
 
     assert Decimal.eq?(
              Decimal.sub(uco_balance, rewards_reserved),

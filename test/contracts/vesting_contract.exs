@@ -120,7 +120,7 @@ condition triggered_by: transaction, on: withdraw(amount, deposit_index) do
   user_deposits_size = List.size(user_deposits)
 
   if user_deposits_size == 0 do
-    throw(message: "user has no claim", code: 3001)
+    throw(message: "user has no deposit", code: 3001)
   end
 
   if user_deposits_size < deposit_index + 1 do
@@ -200,6 +200,46 @@ actions triggered_by: transaction, on: withdraw(amount, deposit_index) do
   end
 
   State.set("deposits", deposits)
+end
+
+condition triggered_by: transaction, on: relock(end_timestamp, deposit_index) do
+  if end_timestamp == "max" do
+    end_timestamp = @END_DATE
+  end
+
+  previous_address = Chain.get_previous_address(transaction)
+  genesis_address = Chain.get_genesis_address(previous_address)
+
+  deposits = State.get("deposits", Map.new())
+  user_deposits = Map.get(deposits, genesis_address, [])
+  user_deposits_size = List.size(user_deposits)
+
+  if user_deposits_size == 0 do
+    throw(message: "user has no deposit", code: 4000)
+  end
+
+  if user_deposits_size < deposit_index + 1 do
+    throw(message: "invalid index", code: 4001)
+  end
+
+  if transaction.timestamp >= @END_DATE do
+    throw(message: "relock impossible once farm is closed", code: 4002)
+  end
+
+  if end_timestamp > @END_DATE do
+    throw(message: "relock's end cannot be past farm's end", code: 4003)
+  end
+
+  user_deposit = List.at(user_deposits, deposit_index)
+
+  if user_deposit["end"] >= end_timestamp do
+    throw(message: "relock's end cannot be inferior or equal to deposit's end", code: 4004)
+  end
+
+  true
+end
+
+actions triggered_by: transaction, on: relock(end_timestamp, deposit_index) do
 end
 
 condition(
@@ -377,7 +417,7 @@ fun calculate_new_rewards() do
   ]
 end
 
-export fun get_farm_infos() do
+export fun(get_farm_infos()) do
   now = Time.now()
   reward_token_balance = 0
   day = 86400
@@ -399,14 +439,70 @@ export fun get_farm_infos() do
   lp_tokens_deposited = State.get("lp_tokens_deposited", 0)
 
   stats = Map.new()
-  stats = Map.set(stats, "0", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
-  stats = Map.set(stats, "1", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
-  stats = Map.set(stats, "2", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
-  stats = Map.set(stats, "3", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
-  stats = Map.set(stats, "4", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
-  stats = Map.set(stats, "5", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
-  stats = Map.set(stats, "6", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
-  stats = Map.set(stats, "7", lp_tokens_deposited: 0, deposits_count: 0, tvl_ratio: 0, rewards_allocated: 0)
+
+  stats =
+    Map.set(stats, "0",
+      lp_tokens_deposited: 0,
+      deposits_count: 0,
+      tvl_ratio: 0,
+      rewards_allocated: 0
+    )
+
+  stats =
+    Map.set(stats, "1",
+      lp_tokens_deposited: 0,
+      deposits_count: 0,
+      tvl_ratio: 0,
+      rewards_allocated: 0
+    )
+
+  stats =
+    Map.set(stats, "2",
+      lp_tokens_deposited: 0,
+      deposits_count: 0,
+      tvl_ratio: 0,
+      rewards_allocated: 0
+    )
+
+  stats =
+    Map.set(stats, "3",
+      lp_tokens_deposited: 0,
+      deposits_count: 0,
+      tvl_ratio: 0,
+      rewards_allocated: 0
+    )
+
+  stats =
+    Map.set(stats, "4",
+      lp_tokens_deposited: 0,
+      deposits_count: 0,
+      tvl_ratio: 0,
+      rewards_allocated: 0
+    )
+
+  stats =
+    Map.set(stats, "5",
+      lp_tokens_deposited: 0,
+      deposits_count: 0,
+      tvl_ratio: 0,
+      rewards_allocated: 0
+    )
+
+  stats =
+    Map.set(stats, "6",
+      lp_tokens_deposited: 0,
+      deposits_count: 0,
+      tvl_ratio: 0,
+      rewards_allocated: 0
+    )
+
+  stats =
+    Map.set(stats, "7",
+      lp_tokens_deposited: 0,
+      deposits_count: 0,
+      tvl_ratio: 0,
+      rewards_allocated: 0
+    )
 
   available_levels = Map.new()
   available_levels = Map.set(available_levels, "0", now + 0)
@@ -435,13 +531,21 @@ export fun get_farm_infos() do
       end
 
       stats_for_level = Map.get(stats, level)
-      lp_tokens_deposited_for_level = Map.get(stats_for_level, "lp_tokens_deposited") + user_deposit.amount
+
+      lp_tokens_deposited_for_level =
+        Map.get(stats_for_level, "lp_tokens_deposited") + user_deposit.amount
+
       deposits_count_for_level = Map.get(stats_for_level, "deposits_count") + 1
       tvl_ratio = lp_tokens_deposited_for_level / lp_tokens_deposited
 
-      stats_for_level = Map.set(stats_for_level, "lp_tokens_deposited", lp_tokens_deposited_for_level)
+      stats_for_level =
+        Map.set(stats_for_level, "lp_tokens_deposited", lp_tokens_deposited_for_level)
+
       stats_for_level = Map.set(stats_for_level, "tvl_ratio", tvl_ratio)
-      stats_for_level = Map.set(stats_for_level, "rewards_allocated", tvl_ratio * reward_token_balance)
+
+      stats_for_level =
+        Map.set(stats_for_level, "rewards_allocated", tvl_ratio * reward_token_balance)
+
       stats_for_level = Map.set(stats_for_level, "deposits_count", deposits_count_for_level)
       stats = Map.set(stats, level, stats_for_level)
     end
@@ -459,7 +563,7 @@ export fun get_farm_infos() do
   ]
 end
 
-export fun get_user_infos(user_genesis_address) do
+export fun(get_user_infos(user_genesis_address)) do
   now = Time.now()
   day = 86400
   reply = []
@@ -480,8 +584,10 @@ export fun get_user_infos(user_genesis_address) do
   user_deposits = Map.get(deposits, user_genesis_address, [])
 
   i = 0
+
   for user_deposit in user_deposits do
     level = nil
+
     for l in Map.keys(available_levels) do
       if level == nil do
         until = Map.get(available_levels, l)
