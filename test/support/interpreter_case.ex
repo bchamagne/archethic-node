@@ -143,6 +143,7 @@ defmodule InterpreterCase do
           case type do
             :date -> value |> DateTime.to_unix() |> Integer.to_string()
             :string -> "\"#{value}\""
+            :int -> value |> Integer.to_string()
           end
         )
       end)

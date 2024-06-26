@@ -19,6 +19,7 @@ defmodule VestingTest do
     constants = [
       {"@START_DATE", :date, @start_date},
       {"@END_DATE", :date, @end_date},
+      {"@INITIAL_BALANCE", :int, @initial_balance},
       {"@REWARD_TOKEN", :string, "UCO"},
       {"@FARM_ADDRESS", :string, @farm_address},
       {"@LP_TOKEN_ADDRESS", :string, @lp_token_address},
@@ -179,8 +180,7 @@ defmodule VestingTest do
       |> Trigger.named_action("claim", %{"deposit_index" => 0})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
 
-    MockChain
-    |> expect(:get_genesis_address, fn _ -> trigger["genesis_address"] end)
+    mock_genesis_address([trigger])
 
     assert {:throw, 2000} =
              contract
@@ -202,8 +202,7 @@ defmodule VestingTest do
       |> Trigger.named_action("claim", %{"deposit_index" => 999})
       |> Trigger.timestamp(@start_date |> DateTime.add(2))
 
-    MockChain
-    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+    mock_genesis_address([trigger1, trigger2])
 
     assert {:throw, 2000} =
              contract
@@ -215,23 +214,29 @@ defmodule VestingTest do
   test "claim/1 should not be allowed if reward_amount is 0", %{contract: contract} do
     state = %{}
 
+    trigger0 =
+      Trigger.new("seed2", 1)
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("999999999999"))
+
     trigger1 =
       Trigger.new("seed", 1)
       |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
-      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("0.00000001"))
 
     trigger2 =
       Trigger.new("seed", 2)
       |> Trigger.named_action("claim", %{"deposit_index" => 0})
       |> Trigger.timestamp(@start_date |> DateTime.add(2))
 
-    MockChain
-    |> expect(:get_genesis_address, 3, fn _ -> trigger1["genesis_address"] end)
+    mock_genesis_address([trigger0, trigger1, trigger2])
 
     assert {:condition_failed, _} =
              contract
              |> prepare_contract(state)
+             |> trigger_contract(trigger0)
              |> trigger_contract(trigger1)
              |> trigger_contract(trigger2)
   end
@@ -275,8 +280,7 @@ defmodule VestingTest do
       |> Trigger.named_action("withdraw", %{"amount" => 1, "deposit_index" => 0})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
 
-    MockChain
-    |> expect(:get_genesis_address, fn _ -> trigger["genesis_address"] end)
+    mock_genesis_address([trigger])
 
     assert {:throw, 3000} =
              contract
@@ -298,8 +302,7 @@ defmodule VestingTest do
       |> Trigger.named_action("withdraw", %{"amount" => 1, "deposit_index" => 999})
       |> Trigger.timestamp(@start_date |> DateTime.add(2))
 
-    MockChain
-    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+    mock_genesis_address([trigger1, trigger2])
 
     assert {:throw, 3000} =
              contract
@@ -322,8 +325,7 @@ defmodule VestingTest do
       |> Trigger.named_action("withdraw", %{"amount" => 2, "deposit_index" => 0})
       |> Trigger.timestamp(@start_date |> DateTime.add(2))
 
-    MockChain
-    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+    mock_genesis_address([trigger1, trigger2])
 
     assert {:throw, 3003} =
              contract
@@ -402,8 +404,7 @@ defmodule VestingTest do
       |> Trigger.named_action("relock", %{"end_timestamp" => "max", "deposit_index" => 0})
       |> Trigger.timestamp(@start_date |> DateTime.add(2))
 
-    MockChain
-    |> expect(:get_genesis_address, 2, fn _ -> trigger["genesis_address"] end)
+    mock_genesis_address([trigger])
 
     assert {:throw, 4000} =
              contract
@@ -425,8 +426,7 @@ defmodule VestingTest do
       |> Trigger.named_action("relock", %{"end_timestamp" => "max", "deposit_index" => 50})
       |> Trigger.timestamp(@start_date |> DateTime.add(2))
 
-    MockChain
-    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+    mock_genesis_address([trigger1, trigger2])
 
     assert {:throw, 4000} =
              contract
@@ -452,8 +452,7 @@ defmodule VestingTest do
       })
       |> Trigger.timestamp(@end_date |> DateTime.add(1))
 
-    MockChain
-    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+    mock_genesis_address([trigger1, trigger2])
 
     assert {:throw, 4002} =
              contract
@@ -479,8 +478,7 @@ defmodule VestingTest do
       })
       |> Trigger.timestamp(@start_date |> DateTime.add(2))
 
-    MockChain
-    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+    mock_genesis_address([trigger1, trigger2])
 
     assert {:throw, 4003} =
              contract
@@ -508,8 +506,7 @@ defmodule VestingTest do
       })
       |> Trigger.timestamp(@start_date |> DateTime.add(2))
 
-    MockChain
-    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+    mock_genesis_address([trigger1, trigger2])
 
     assert {:throw, 4004} =
              contract
@@ -534,8 +531,7 @@ defmodule VestingTest do
       |> Trigger.named_action("relock", %{"end_timestamp" => "max", "deposit_index" => 0})
       |> Trigger.timestamp(@start_date |> DateTime.add(2))
 
-    MockChain
-    |> expect(:get_genesis_address, 2, fn _ -> trigger1["genesis_address"] end)
+    mock_genesis_address([trigger1, trigger2])
 
     assert {:throw, 4004} =
              contract
