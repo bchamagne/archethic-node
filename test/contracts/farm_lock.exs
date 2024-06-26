@@ -25,13 +25,14 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
     end_timestamp = @END_DATE
   end
 
+  now = Time.now()
   transfer_amount = get_user_transfer_amount()
 
   user_genesis_address = get_user_genesis(transaction)
 
   deposits = nil
 
-  if Time.now() > @START_DATE do
+  if now > @START_DATE do
     res = calculate_new_rewards()
     deposits = res.deposits
     State.set("rewards_reserved", res.rewards_reserved)
@@ -40,7 +41,7 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
     deposits = State.get("deposits", Map.new())
   end
 
-  current_deposit = [amount: transfer_amount, reward_amount: 0, end: end_timestamp]
+  current_deposit = [amount: transfer_amount, reward_amount: 0, start: now, end: end_timestamp]
 
   user_deposits = Map.get(deposits, user_genesis_address, [])
   user_deposits = List.append(user_deposits, current_deposit)
@@ -214,6 +215,7 @@ actions triggered_by: transaction, on: relock(end_timestamp, deposit_index) do
     end_timestamp = @END_DATE
   end
 
+  now = Time.now()
   user_genesis_address = get_user_genesis(transaction)
 
   res = calculate_new_rewards()
@@ -362,7 +364,7 @@ end
 fun calculate_new_rewards() do
   now = Time.now()
   day = 86400
-  year = 31536000
+  year = 31_536_000
 
   deposits = State.get("deposits", Map.new())
   lp_tokens_deposited = State.get("lp_tokens_deposited", 0)
@@ -402,15 +404,19 @@ fun calculate_new_rewards() do
       initial_balance = rewards_balance + State.get("rewards_distributed", 0)
 
       amount_to_allocate_year = nil
+
       if amount_to_allocate_year == nil && now > @START_DATE + 3 * year do
         amount_to_allocate_year = initial_balance * 0.125
       end
+
       if amount_to_allocate_year == nil && now > @START_DATE + 2 * year do
         amount_to_allocate_year = initial_balance * 0.125
       end
+
       if amount_to_allocate_year == nil && now > @START_DATE + year do
         amount_to_allocate_year = initial_balance * 0.25
       end
+
       if amount_to_allocate_year == nil do
         amount_to_allocate_year = initial_balance * 0.5
       end
@@ -427,8 +433,10 @@ fun calculate_new_rewards() do
     amount_deposited_per_level = Map.set(amount_deposited_per_level, "5", 0)
     amount_deposited_per_level = Map.set(amount_deposited_per_level, "6", 0)
     amount_deposited_per_level = Map.set(amount_deposited_per_level, "7", 0)
+
     for address in Map.keys(deposits) do
       user_deposits = Map.get(deposits, address)
+
       for user_deposit in user_deposits do
         level = nil
 
@@ -446,7 +454,12 @@ fun calculate_new_rewards() do
           level = "7"
         end
 
-        amount_deposited_per_level = Map.set(amount_deposited_per_level, level, Map.get(amount_deposited_per_level, level) + user_deposit.amount)
+        amount_deposited_per_level =
+          Map.set(
+            amount_deposited_per_level,
+            level,
+            Map.get(amount_deposited_per_level, level) + user_deposit.amount
+          )
       end
     end
 
@@ -461,9 +474,12 @@ fun calculate_new_rewards() do
     weight_per_level = Map.set(weight_per_level, "7", 0.449)
 
     amount_to_allocate_per_level = Map.new()
+
     for level in Map.keys(weight_per_level) do
       weight = Map.get(weight_per_level, level)
-      amount_to_allocate_per_level = Map.set(amount_to_allocate_per_level, level, weight * amount_to_allocate)
+
+      amount_to_allocate_per_level =
+        Map.set(amount_to_allocate_per_level, level, weight * amount_to_allocate)
     end
 
     if amount_to_allocate > 0 do
@@ -494,7 +510,12 @@ fun calculate_new_rewards() do
           new_reward_amount = amount_to_allocate * (user_deposit.amount / amount_deposited)
 
           if new_reward_amount > 0 do
-            user_deposit = Map.set(user_deposit, "reward_amount", user_deposit.reward_amount + new_reward_amount)
+            user_deposit =
+              Map.set(
+                user_deposit,
+                "reward_amount",
+                user_deposit.reward_amount + new_reward_amount
+              )
 
             rewards_reserved = rewards_reserved + new_reward_amount
 
@@ -516,7 +537,7 @@ fun calculate_new_rewards() do
   ]
 end
 
-export fun get_farm_infos() do
+export fun(get_farm_infos()) do
   now = Time.now()
   reward_token_balance = 0
   day = 86400
@@ -630,6 +651,7 @@ export fun get_farm_infos() do
       deposits_count: 0,
       tvl_ratio: 0
     )
+
   for user_genesis in Map.keys(deposits) do
     user_deposits = Map.get(deposits, user_genesis)
 
@@ -680,7 +702,7 @@ export fun get_farm_infos() do
   ]
 end
 
-export fun get_user_infos(user_genesis_address) do
+export fun(get_user_infos(user_genesis_address)) do
   now = Time.now()
   day = 86400
   reply = []
@@ -723,6 +745,7 @@ export fun get_user_infos(user_genesis_address) do
       index: i,
       amount: user_deposit.amount,
       reward_amount: user_deposit.reward_amount,
+      start: user_deposit.start,
       end: user_deposit.end,
       level: level
     ]

@@ -671,6 +671,8 @@ defmodule VestingTest do
     # stats are there
     for stat <- Map.values(farm_infos["stats"]) do
       refute Decimal.negative?(Decimal.new(stat["deposits_count"]))
+      assert Decimal.gt?(stat["weight"], 0)
+      assert Decimal.lt?(stat["weight"], 1)
     end
 
     # custom asserts
@@ -709,7 +711,12 @@ defmodule VestingTest do
         time_now
       )
 
-    for %{index: index, amount: amount, end_timestamp: end_timestamp} <- expected_state do
+    for %{
+          index: index,
+          amount: amount,
+          start_timestamp: start_timestamp,
+          end_timestamp: end_timestamp
+        } <- expected_state do
       end_timestamp =
         if end_timestamp == "max" do
           @end_date |> DateTime.to_unix()
@@ -720,6 +727,7 @@ defmodule VestingTest do
       user_info = Enum.at(user_infos, index)
 
       assert index == user_info["index"]
+      assert start_timestamp == user_info["start"]
       assert end_timestamp == user_info["end"]
       assert Decimal.eq?(amount, user_info["amount"])
       assert Decimal.compare(user_info["reward_amount"], 0) in [:eq, :gt]
@@ -771,16 +779,23 @@ defmodule VestingTest do
       user_deposits =
         case action do
           :deposit ->
-            end_timestamp =
+            start_timestamp =
               @start_date
               |> DateTime.add(payload.delay, :day)
+
+            end_timestamp =
+              start_timestamp
               |> DateTime.add(level_to_seconds(payload.level), :second)
-              |> DateTime.to_unix()
 
             deposit = %{
               seed: payload.seed,
               amount: payload.amount,
-              end_timestamp: end_timestamp,
+              start_timestamp:
+                start_timestamp
+                |> DateTime.to_unix(),
+              end_timestamp:
+                end_timestamp
+                |> DateTime.to_unix(),
               index: length(user_deposits)
             }
 
