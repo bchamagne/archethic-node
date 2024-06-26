@@ -1,5 +1,29 @@
 @version 1
 
+# force a calculate at end of year 1: 2025-07-14T23:59:00Z
+action triggered_by: datetime, at: 1752537540 do
+  res = calculate_new_rewards()
+  State.set("rewards_reserved", res.rewards_reserved)
+  State.set("last_calculation_timestamp", res.last_calculation_timestamp)
+  State.set("deposits", res.deposits)
+end
+
+# force a calculate at end of year 2: 2026-07-14T23:59:00Z
+action triggered_by: datetime, at: 1784073540 do
+  res = calculate_new_rewards()
+  State.set("rewards_reserved", res.rewards_reserved)
+  State.set("last_calculation_timestamp", res.last_calculation_timestamp)
+  State.set("deposits", res.deposits)
+end
+
+# force a calculate at end of year 3: 2027-07-14T23:59:00Z
+action triggered_by: datetime, at: 1815609540 do
+  res = calculate_new_rewards()
+  State.set("rewards_reserved", res.rewards_reserved)
+  State.set("last_calculation_timestamp", res.last_calculation_timestamp)
+  State.set("deposits", res.deposits)
+end
+
 condition triggered_by: transaction, on: deposit(end_timestamp) do
   if end_timestamp == "max" do
     end_timestamp = @END_DATE
