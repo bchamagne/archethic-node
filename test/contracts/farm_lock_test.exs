@@ -642,14 +642,14 @@ defmodule VestingTest do
              |> Map.values()
              |> Enum.reduce(0, &Decimal.add(&1["rewards_allocated"], &2))
              |> then(fn total_rewards_allocated ->
-               # we can't compare directly because the ratio are not precise
+               # we can't compare directly because the rewards_allocated are not precise
                Decimal.div(uco_balance, total_rewards_allocated)
                |> Decimal.round()
                |> Decimal.eq?(1)
              end)
     end
 
-    # remaining_rewards subtracts the reserved rewards
+    # sum of rewards_amount == rewards_reserved
     rewards_reserved =
       contract.state["deposits"]
       |> Map.values()
@@ -661,6 +661,7 @@ defmodule VestingTest do
       assert Decimal.eq?(rewards_reserved, contract.state["rewards_reserved"])
     end
 
+    # remaining_rewards subtracts the reserved rewards
     assert Decimal.eq?(
              uco_balance
              |> Decimal.sub(rewards_reserved),
