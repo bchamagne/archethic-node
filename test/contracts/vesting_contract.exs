@@ -360,12 +360,24 @@ fun get_user_transfer_amount() do
 end
 
 fun calculate_new_rewards() do
+  now = Time.now()
+  day = 86400
+  year = 31536000
+
   deposits = State.get("deposits", Map.new())
   lp_tokens_deposited = State.get("lp_tokens_deposited", 0)
   rewards_reserved = State.get("rewards_reserved", 0)
   last_calculation_timestamp = State.get("last_calculation_timestamp", @START_DATE)
 
-  now = Time.now()
+  available_levels = Map.new()
+  available_levels = Map.set(available_levels, "0", now + 0)
+  available_levels = Map.set(available_levels, "1", now + 7 * day)
+  available_levels = Map.set(available_levels, "2", now + 30 * day)
+  available_levels = Map.set(available_levels, "3", now + 90 * day)
+  available_levels = Map.set(available_levels, "4", now + 180 * day)
+  available_levels = Map.set(available_levels, "5", now + 365 * day)
+  available_levels = Map.set(available_levels, "6", now + 730 * day)
+  available_levels = Map.set(available_levels, "7", now + 1095 * day)
 
   if last_calculation_timestamp < now && last_calculation_timestamp < @END_DATE &&
        lp_tokens_deposited > 0 do
@@ -386,9 +398,68 @@ fun calculate_new_rewards() do
       amount_to_allocate = available_balance
     else
       time_elapsed = now - last_calculation_timestamp
-      time_remaining = @END_DATE - last_calculation_timestamp
 
-      amount_to_allocate = available_balance * (time_elapsed / time_remaining)
+      initial_balance = rewards_balance + State.get("rewards_distributed", 0)
+
+      amount_to_allocate_year = nil
+      if amount_to_allocate_year == nil && now > @START_DATE + 3 * year do
+        amount_to_allocate_year = initial_balance * 0.125
+      end
+      if amount_to_allocate_year == nil && now > @START_DATE + 2 * year do
+        amount_to_allocate_year = initial_balance * 0.125
+      end
+      if amount_to_allocate_year == nil && now > @START_DATE + year do
+        amount_to_allocate_year = initial_balance * 0.25
+      end
+      if amount_to_allocate_year == nil do
+        amount_to_allocate_year = initial_balance * 0.5
+      end
+
+      amount_to_allocate = amount_to_allocate_year * (time_elapsed / year)
+    end
+
+    amount_deposited_per_level = Map.new()
+    amount_deposited_per_level = Map.set(amount_deposited_per_level, "0", 0)
+    amount_deposited_per_level = Map.set(amount_deposited_per_level, "1", 0)
+    amount_deposited_per_level = Map.set(amount_deposited_per_level, "2", 0)
+    amount_deposited_per_level = Map.set(amount_deposited_per_level, "3", 0)
+    amount_deposited_per_level = Map.set(amount_deposited_per_level, "4", 0)
+    amount_deposited_per_level = Map.set(amount_deposited_per_level, "5", 0)
+    amount_deposited_per_level = Map.set(amount_deposited_per_level, "6", 0)
+    amount_deposited_per_level = Map.set(amount_deposited_per_level, "7", 0)
+    for address in Map.keys(deposits) do
+      user_deposits = Map.get(deposits, address)
+      for user_deposit in user_deposits do
+        level = nil
+
+        for l in Map.keys(available_levels) do
+          if level == nil do
+            until = Map.get(available_levels, l)
+
+            if user_deposit.end <= until do
+              level = l
+            end
+          end
+        end
+
+        if level == nil do
+          level = "7"
+        end
+
+        amount_deposited_per_level = Map.set(amount_deposited_per_level, level, Map.get(amount_deposited_per_level, level) + user_deposit.amount)
+      end
+    end
+
+    tvl_ratio_per_level = Map.new()
+    for level in Map.keys(amount_deposited_per_level) do
+      amount_deposited = Map.get(amount_deposited_per_level, level)
+      tvl_ratio_per_level = Map.set(tvl_ratio_per_level, level, amount_deposited / lp_tokens_deposited)
+    end
+
+    amount_to_allocate_per_level = Map.new()
+    for level in Map.keys(tvl_ratio_per_level) do
+      tvl_ratio = Map.get(tvl_ratio_per_level, level)
+      amount_to_allocate_per_level = Map.set(amount_to_allocate_per_level, level, tvl_ratio * amount_to_allocate)
     end
 
     if amount_to_allocate > 0 do
@@ -396,18 +467,37 @@ fun calculate_new_rewards() do
         user_deposits = Map.get(deposits, address)
         user_deposits_updated = []
 
-        for deposit in user_deposits do
-          new_reward_amount = amount_to_allocate * (deposit.amount / lp_tokens_deposited)
+        for user_deposit in user_deposits do
+          level = nil
+
+          for l in Map.keys(available_levels) do
+            if level == nil do
+              until = Map.get(available_levels, l)
+
+              if user_deposit.end <= until do
+                level = l
+              end
+            end
+          end
+
+          if level == nil do
+            level = "7"
+          end
+
+          amount_to_allocate = Map.get(amount_to_allocate_per_level, level)
+          amount_deposited = Map.get(amount_deposited_per_level, level)
+
+          new_reward_amount = amount_to_allocate * (user_deposit.amount / amount_deposited)
 
           if new_reward_amount > 0 do
-            deposit = Map.set(deposit, "reward_amount", deposit.reward_amount + new_reward_amount)
+            user_deposit = Map.set(user_deposit, "reward_amount", user_deposit.reward_amount + new_reward_amount)
 
             rewards_reserved = rewards_reserved + new_reward_amount
 
             last_calculation_timestamp = now
           end
 
-          user_deposits_updated = List.append(user_deposits_updated, deposit)
+          user_deposits_updated = List.append(user_deposits_updated, user_deposit)
         end
 
         deposits = Map.set(deposits, address, user_deposits_updated)
