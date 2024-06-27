@@ -482,16 +482,33 @@ fun calculate_new_rewards() do
     weight_per_level = Map.set(weight_per_level, "6", 0.249)
     weight_per_level = Map.set(weight_per_level, "7", 0.449)
 
-    amount_to_allocate_per_level = Map.new()
+    total_weighted_amount_deposited = 0
 
     for level in Map.keys(weight_per_level) do
       weight = Map.get(weight_per_level, level)
+      amount_deposited = Map.get(amount_deposited_per_level, level)
+      weighted_amount_deposited = amount_deposited * weight
 
-      amount_to_allocate_per_level =
-        Map.set(amount_to_allocate_per_level, level, weight * amount_to_allocate)
+      total_weighted_amount_deposited =
+        total_weighted_amount_deposited + weighted_amount_deposited
     end
 
-    if amount_to_allocate > 0 do
+    if total_weighted_amount_deposited > 0 do
+      amount_to_allocate_per_level = Map.new()
+
+      for level in Map.keys(weight_per_level) do
+        weight = Map.get(weight_per_level, level)
+        amount_deposited = Map.get(amount_deposited_per_level, level)
+        weighted_amount_deposited = amount_deposited * weight
+
+        amount_to_allocate_per_level =
+          Map.set(
+            amount_to_allocate_per_level,
+            level,
+            weighted_amount_deposited / total_weighted_amount_deposited * amount_to_allocate
+          )
+      end
+
       for address in Map.keys(deposits) do
         user_deposits = Map.get(deposits, address)
         user_deposits_updated = []

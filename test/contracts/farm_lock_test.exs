@@ -272,12 +272,15 @@ defmodule VestingTest do
             deposits <- deposits_generator(count),
             {:deposit, deposit} <- StreamData.member_of(deposits)
           ) do
-
       deposit_duration_in_day = max(1, div(level_to_seconds(deposit.level), 86400))
 
       claim =
         {:claim,
-         %{delay: deposit.delay + deposit_duration_in_day, seed: deposit.seed, deposit_index: deposit.deposit_index}}
+         %{
+           delay: deposit.delay + deposit_duration_in_day,
+           seed: deposit.seed,
+           deposit_index: deposit.deposit_index
+         }}
 
       actions = deposits ++ [claim]
 
