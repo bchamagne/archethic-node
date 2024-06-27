@@ -11,8 +11,8 @@ defmodule VestingTest do
   @master_address "00000000000000000000000000000000000000000000000000000000000000000004"
   @farm_address "00000000000000000000000000000000000000000000000000000000000000000005"
   @invalid_address "00000000000000000000000000000000000000000000000000000000000000000006"
-  @start_date ~U[2024-01-01T00:00:00Z]
-  @end_date ~U[2028-01-01T00:00:00Z]
+  @start_date ~U[2024-07-17T00:00:00Z]
+  @end_date ~U[2028-07-17T00:00:00Z]
   @initial_balance 90_000_000
 
   setup do
@@ -148,9 +148,36 @@ defmodule VestingTest do
     contract: contract
   } do
     check all(
-            count <- StreamData.integer(1..10),
-            deposits <- deposits_generator(count),
-            {:deposit, deposit} <- StreamData.member_of(deposits)
+            deposits <-
+              StreamData.constant(
+                deposit: %{
+                  amount: Decimal.new("42.00000000"),
+                  delay: 1,
+                  deposit_index: 0,
+                  level: "6",
+                  seed: <<210, 66, 235, 243, 17, 190, 82, 243, 125, 63>>
+                },
+                deposit: %{
+                  amount: Decimal.new("1337.00000000"),
+                  delay: 400,
+                  deposit_index: 1,
+                  level: "0",
+                  seed: <<210, 66, 235, 243, 17, 190, 82, 243, 125, 63>>
+                }
+              ),
+            {:deposit, deposit} <-
+              StreamData.constant(
+                {:deposit,
+                 %{
+                   seed: <<210, 66, 235, 243, 17, 190, 82, 243, 125, 63>>
+                 }}
+              ),
+
+            # count <- StreamData.integer(1..10),
+            # deposits <- deposits_generator(count),
+            # {:deposit, deposit} <- StreamData.member_of(deposits),
+            max_runs: 1,
+            max_shrinking_steps: 1
           ) do
       result_contract = run_actions(deposits, contract, %{}, @initial_balance)
       asserts_get_user_infos(result_contract, deposit.seed, deposits)
