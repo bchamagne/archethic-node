@@ -4,6 +4,9 @@ condition triggered_by: transaction, on: deposit(end_timestamp) do
   if end_timestamp == "max" do
     end_timestamp = @END_DATE
   end
+  if end_timestamp == "flex" do
+    end_timestamp = 0
+  end
 
   if transaction.timestamp >= @END_DATE do
     throw(message: "deposit impossible once farm is closed", code: 1001)
@@ -21,11 +24,18 @@ condition triggered_by: transaction, on: deposit(end_timestamp) do
 end
 
 actions triggered_by: transaction, on: deposit(end_timestamp) do
+  now = Time.now()
+  start = now
+
   if end_timestamp == "max" do
     end_timestamp = @END_DATE
   end
 
-  now = Time.now()
+  if end_timestamp == "flex" do
+    end_timestamp = 0
+    start = nil
+  end
+
   transfer_amount = get_user_transfer_amount()
 
   user_genesis_address = get_user_genesis(transaction)
@@ -773,10 +783,13 @@ export fun(get_user_infos(user_genesis_address)) do
       index: i,
       amount: user_deposit.amount,
       reward_amount: user_deposit.reward_amount,
-      start: user_deposit.start,
-      end: user_deposit.end,
       level: level
     ]
+
+    if user_deposit.end > now do
+      info = Map.set(info, "end", user_deposit.end)
+      info = Map.set(info, "start", user_deposit.start)
+    end
 
     reply = List.append(reply, info)
     i = i + 1

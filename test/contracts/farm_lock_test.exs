@@ -752,11 +752,14 @@ defmodule VestingTest do
       user_info = Enum.at(user_infos, index)
 
       assert index == user_info["index"]
-      assert start_timestamp == user_info["start"]
-      assert end_timestamp == user_info["end"]
       assert Decimal.eq?(amount, user_info["amount"])
       assert Decimal.compare(user_info["reward_amount"], 0) in [:eq, :gt]
       assert end_to_level(end_timestamp, time_now) == user_info["level"]
+
+      if end_timestamp > DateTime.to_unix(time_now) do
+        assert start_timestamp == user_info["start"]
+        assert end_timestamp == user_info["end"]
+      end
     end
 
     # custom asserts
