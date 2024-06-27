@@ -211,18 +211,41 @@ defmodule VestingTest do
              |> trigger_contract(trigger2)
   end
 
+  test "claim/1 should throw if called before the end of lock", %{contract: contract} do
+    state = %{}
+
+    trigger1 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+    trigger2 =
+      Trigger.new("seed", 2)
+      |> Trigger.named_action("claim", %{"deposit_index" => 0})
+      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+
+    mock_genesis_address([trigger1, trigger2])
+
+    assert {:throw, 2002} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger1)
+             |> trigger_contract(trigger2)
+  end
+
   test "claim/1 should not be allowed if reward_amount is 0", %{contract: contract} do
     state = %{}
 
     trigger0 =
       Trigger.new("seed2", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "0"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("999999999999"))
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "0"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("0.00000001"))
 
@@ -249,9 +272,12 @@ defmodule VestingTest do
             deposits <- deposits_generator(count),
             {:deposit, deposit} <- StreamData.member_of(deposits)
           ) do
+
+      deposit_duration_in_day = max(1, div(level_to_seconds(deposit.level), 86400))
+
       claim =
         {:claim,
-         %{delay: deposit.delay + 1, seed: deposit.seed, deposit_index: deposit.deposit_index}}
+         %{delay: deposit.delay + deposit_duration_in_day, seed: deposit.seed, deposit_index: deposit.deposit_index}}
 
       actions = deposits ++ [claim]
 

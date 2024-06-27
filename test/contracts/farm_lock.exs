@@ -58,11 +58,16 @@ condition triggered_by: transaction, on: claim(deposit_index) do
     throw(message: "farm is not started yet", code: 2001)
   end
 
+  now = Time.now()
   user_genesis_address = get_user_genesis(transaction)
   user_deposit = get_user_deposit(user_genesis_address, deposit_index)
 
   if user_deposit == nil do
     throw(message: "deposit not found", code: 2000)
+  end
+
+  if user_deposit.end > now do
+    throw(message: "claiming before end of lock", code: 2002)
   end
 
   res = calculate_new_rewards()
