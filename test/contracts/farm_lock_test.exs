@@ -158,6 +158,13 @@ defmodule VestingTest do
                   seed: <<210, 66, 235, 243, 17, 190, 82, 243, 125, 63>>
                 },
                 deposit: %{
+                  amount: Decimal.new("200.00000000"),
+                  delay: 55,
+                  deposit_index: 1,
+                  level: "1",
+                  seed: <<1, 2, 3, 4, 5, 6, 7, 8, 9, 0>>
+                },
+                deposit: %{
                   amount: Decimal.new("1337.00000000"),
                   delay: 400,
                   deposit_index: 1,
