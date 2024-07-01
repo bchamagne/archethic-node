@@ -148,43 +148,9 @@ defmodule VestingTest do
     contract: contract
   } do
     check all(
-            deposits <-
-              StreamData.constant(
-                deposit: %{
-                  amount: Decimal.new("42.00000000"),
-                  delay: 1,
-                  deposit_index: 0,
-                  level: "6",
-                  seed: <<210, 66, 235, 243, 17, 190, 82, 243, 125, 63>>
-                },
-                deposit: %{
-                  amount: Decimal.new("200.00000000"),
-                  delay: 55,
-                  deposit_index: 1,
-                  level: "1",
-                  seed: <<1, 2, 3, 4, 5, 6, 7, 8, 9, 0>>
-                },
-                deposit: %{
-                  amount: Decimal.new("1337.00000000"),
-                  delay: 400,
-                  deposit_index: 1,
-                  level: "0",
-                  seed: <<210, 66, 235, 243, 17, 190, 82, 243, 125, 63>>
-                }
-              ),
-            {:deposit, deposit} <-
-              StreamData.constant(
-                {:deposit,
-                 %{
-                   seed: <<210, 66, 235, 243, 17, 190, 82, 243, 125, 63>>
-                 }}
-              ),
-
-            # count <- StreamData.integer(1..10),
-            # deposits <- deposits_generator(count),
-            # {:deposit, deposit} <- StreamData.member_of(deposits),
-            max_runs: 1,
-            max_shrinking_steps: 1
+            count <- StreamData.integer(1..10),
+            deposits <- deposits_generator(count),
+            {:deposit, deposit} <- StreamData.member_of(deposits)
           ) do
       result_contract = run_actions(deposits, contract, %{}, @initial_balance)
       asserts_get_user_infos(result_contract, deposit.seed, deposits)
@@ -638,6 +604,65 @@ defmodule VestingTest do
     end
   end
 
+  describe "" do
+    setup %{contract: contract} do
+      deposits =
+        deposits_generator(500, deposits_per_seed: 1)
+        |> Enum.take(1)
+        |> List.flatten()
+
+      contract = run_actions(deposits, contract, %{}, @initial_balance)
+
+      %{contract: contract}
+    end
+
+    test "Time to run a claim with lots of deposits", %{
+      contract: contract
+    } do
+      trigger =
+        Trigger.new("seed", 1)
+        |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
+        |> Trigger.timestamp(@start_date |> DateTime.add(400, :day))
+        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+      start = System.monotonic_time(:millisecond)
+      result_contract = trigger_contract(contract, trigger)
+      stop = System.monotonic_time(:millisecond)
+
+      IO.puts(stop - start)
+
+      assert is_map(result_contract)
+
+      # state = %{}
+
+      # trigger0 =
+      #   Trigger.new("seed2", 1)
+      #   |> Trigger.named_action("deposit", %{"end_timestamp" => "0"})
+      #   |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      #   |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("999999999999"))
+
+      # trigger1 =
+      #   Trigger.new("seed", 1)
+      #   |> Trigger.named_action("deposit", %{"end_timestamp" => "0"})
+      #   |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      #   |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("0.00000001"))
+
+      # trigger2 =
+      #   Trigger.new("seed", 2)
+      #   |> Trigger.named_action("claim", %{"deposit_index" => 0})
+      #   |> Trigger.timestamp(@start_date |> DateTime.add(2))
+
+      # mock_genesis_address([trigger0, trigger1, trigger2])
+
+      # assert {:condition_failed, _} =
+      #          contract
+      #          |> prepare_contract(state)
+      #          |> trigger_contract(trigger0)
+      #          |> trigger_contract(trigger1)
+      #          |> trigger_contract(trigger2)
+    end
+  end
+
   defp asserts_get_farm_infos(contract, actions, opts \\ []) do
     uco_balance = contract.uco_balance
 
@@ -828,7 +853,16 @@ defmodule VestingTest do
     Enum.reduce(
       triggers,
       prepare_contract(contract, state, uco_balance),
-      &trigger_contract(&2, &1, opts)
+      fn trigger, contract ->
+        {time, r} = :timer.tc(fn -> trigger_contract(contract, trigger, opts) end)
+
+        IO.inspect(
+          timestamp: (trigger["timestamp"] - DateTime.to_unix(@start_date)) / 86400,
+          ms: div(time, 1000)
+        )
+
+        r
+      end
     )
   end
 
