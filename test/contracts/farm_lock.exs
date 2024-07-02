@@ -693,9 +693,13 @@ fun calculate_new_rewards() do
         amount_to_allocate_this_year =
           Map.get(amount_to_allocate_per_year, String.from_number(period.year))
 
+        giveaway_for_period =
+          giveaways_to_allocate * ((period.end - period.start) / time_elapsed_since_last_calc)
+
         reward_to_allocate =
           amount_to_allocate_this_year *
-            ((period.end - period.start) / period.remaining_until_end_of_year)
+            ((period.end - period.start) / period.remaining_until_end_of_year) +
+            giveaway_for_period
 
         total_weighted_lp_deposited = 0
         weighted_lp_deposited_per_level = Map.new()
