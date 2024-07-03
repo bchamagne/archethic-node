@@ -378,7 +378,7 @@ fun get_user_transfer_amount() do
 end
 
 fun calculate_new_rewards() do
-  log("=calculate_new_rewards=")
+  log("==================================")
   now = Time.now()
   day = 86400
   year = 31_536_000
@@ -388,10 +388,7 @@ fun calculate_new_rewards() do
   rewards_reserved = State.get("rewards_reserved", 0)
   last_calculation_timestamp = State.get("last_calculation_timestamp", @START_DATE)
 
-  log(
-    last_calculation_timestamp: (last_calculation_timestamp - @START_DATE) / 86400,
-    now: (now - @START_DATE) / 86400
-  )
+  log("#{(last_calculation_timestamp - @START_DATE) / 86400}->#{(now - @START_DATE) / 86400}")
 
   if last_calculation_timestamp < now && last_calculation_timestamp < @END_DATE &&
        lp_tokens_deposited > 0 do
@@ -550,33 +547,29 @@ fun calculate_new_rewards() do
           for year_period in year_periods do
             deposit_periods_for_year = []
             current_level = nil
+            current_end = year_period.end
 
+            # level is ASC but start_of_level is DESC
+            # assumption that keys are ordered in a map
             for l in Map.keys(start_per_level) do
               start_of_level = Map.get(start_per_level, l)
 
-              if current_level == nil && year_period.start >= start_of_level do
-                current_level = l
+              if year_period.start < start_of_level do
+                current_level = String.from_number(String.to_number(l) + 1)
+
+                if current_level == "8" do
+                  current_level = "7"
+                end
               end
 
-              if start_of_level > year_period.start && start_of_level < year_period.end do
-                deposit_periods_for_year =
-                  List.prepend(deposit_periods_for_year,
-                    start: year_period.start,
-                    end: start_of_level,
-                    elapsed: start_of_level - year_period.start,
-                    remaining_until_end_of_year: year_period.remaining_until_end_of_year,
-                    level: String.from_number(String.to_number(l) + 1),
-                    year: year_period.year,
-                    amount: user_deposit.amount,
-                    user_address: address,
-                    deposit_index: i
-                  )
-
+              if start_of_level >= year_period.start && start_of_level < year_period.end do
                 deposit_periods_for_year =
                   List.prepend(deposit_periods_for_year,
                     start: start_of_level,
-                    end: year_period.end,
-                    elapsed: year_period.end - start_of_level,
+                    start_delay: (start_of_level - @START_DATE) / 86400,
+                    end: current_end,
+                    end_delay: (current_end - @START_DATE) / 86400,
+                    elapsed: current_end - start_of_level,
                     remaining_until_end_of_year: year_period.remaining_until_end_of_year,
                     level: l,
                     year: year_period.year,
@@ -584,27 +577,26 @@ fun calculate_new_rewards() do
                     user_address: address,
                     deposit_index: i
                   )
+
+                current_end = start_of_level
               end
             end
 
-            if deposit_periods_for_year == [] do
-              if current_level == nil do
-                current_level = "7"
-              end
-
-              deposit_periods_for_year = [
-                [
+            if current_end != year_period.start do
+              deposit_periods_for_year =
+                List.prepend(deposit_periods_for_year,
                   start: year_period.start,
-                  end: year_period.end,
-                  elapsed: year_period.end - year_period.start,
+                  start_delay: (year_period.start - @START_DATE) / 86400,
+                  end: current_end,
+                  end_delay: (current_end - @START_DATE) / 86400,
+                  elapsed: current_end - year_period.start,
                   remaining_until_end_of_year: year_period.remaining_until_end_of_year,
                   level: current_level,
                   year: year_period.year,
                   amount: user_deposit.amount,
                   user_address: address,
                   deposit_index: i
-                ]
-              ]
+                )
             end
 
             deposit_periods = deposit_periods ++ deposit_periods_for_year
@@ -693,28 +685,29 @@ fun calculate_new_rewards() do
       # ================================================
       for period in Map.keys(deposits_per_period) do
         deposits_in_period = Map.get(deposits_per_period, period)
-        log(period: period, deposits_in_period: deposits_in_period)
+
+        log(
+          "-period: #{(period.start - @START_DATE) / 86400}->#{(period.end - @START_DATE) / 86400}"
+        )
 
         amount_to_allocate_this_year =
           Map.get(amount_to_allocate_per_year, String.from_number(period.year))
 
-        log(amount_to_allocate_this_year: amount_to_allocate_this_year)
-
         giveaway_for_period =
           giveaways_to_allocate * ((period.end - period.start) / time_elapsed_since_last_calc)
-
-        log(giveaway_for_period: giveaway_for_period)
 
         # rounding imprecision here due to max 8 decimals in the ratio
         reward_to_allocate =
           amount_to_allocate_this_year *
-            ((period.end - period.start) / period.remaining_until_end_of_year) +
+            ((period.end - period.start) / year) +
             giveaway_for_period
 
-        log(reward_to_allocate: reward_to_allocate)
+        log("--reward_to_allocate: #{reward_to_allocate}")
 
         total_weighted_lp_deposited = 0
         weighted_lp_deposited_per_level = Map.new()
+
+        # log(deposits_in_period: deposits_in_period)
 
         for deposit in deposits_in_period do
           current_weighted_amount = Map.get(weighted_lp_deposited_per_level, deposit.level, 0)
@@ -730,8 +723,6 @@ fun calculate_new_rewards() do
 
           total_weighted_lp_deposited = total_weighted_lp_deposited + deposit_weighted_amount
         end
-
-        # if total_weighted_lp_deposited  > 0 ?
 
         reward_to_allocate_per_level = Map.new()
 
@@ -754,8 +745,6 @@ fun calculate_new_rewards() do
               )
           end
         end
-
-        # log(deposits_in_period_count: List.size(deposits_in_period))
 
         time = monotonic()
 

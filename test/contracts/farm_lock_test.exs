@@ -628,13 +628,13 @@ defmodule VestingTest do
           "end_timestamp" => @start_date |> DateTime.add(365, :day) |> DateTime.to_unix()
         })
         |> Trigger.timestamp(@start_date)
-        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1001))
+        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1000))
 
       trigger2 =
         Trigger.new("seed2", 1)
         |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
         |> Trigger.timestamp(@start_date |> DateTime.add(180, :day))
-        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1002))
+        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1000))
 
       triggers = [trigger1, trigger2]
 
@@ -658,6 +658,64 @@ defmodule VestingTest do
              |> hd()
              |> Access.get("reward_amount")
              |> Decimal.eq?(0)
+    end
+
+    test "2 deposits with many level changes", %{contract: contract} do
+      state = %{}
+
+      trigger1 =
+        Trigger.new("seed", 1)
+        |> Trigger.named_action("deposit", %{
+          "end_timestamp" => @start_date |> DateTime.add(365, :day) |> DateTime.to_unix()
+        })
+        |> Trigger.timestamp(@start_date)
+        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1000))
+
+      trigger2 =
+        Trigger.new("seed2", 1)
+        |> Trigger.named_action("deposit", %{
+          "end_timestamp" => @start_date |> DateTime.add(35, :day) |> DateTime.to_unix()
+        })
+        |> Trigger.timestamp(@start_date |> DateTime.add(5, :day))
+        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1000))
+
+      trigger3 =
+        Trigger.new("seed3", 1)
+        |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+        |> Trigger.timestamp(@start_date |> DateTime.add(180, :day))
+        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1000))
+
+      triggers = [trigger1, trigger2, trigger3]
+
+      mock_genesis_address(triggers)
+
+      result_contract =
+        contract
+        |> prepare_contract(state, @initial_balance)
+        |> then(fn contract ->
+          Enum.reduce(triggers, contract, &trigger_contract(&2, &1))
+        end)
+
+      # D = (180/365) * 45_000_000
+      # periods: 0-5, 5-28, 28-35, 35-180
+      #
+      # W1 = (1, 0)
+      # W2 = (0.85185185, 0.14814814)
+      # W3 = (0.91390728, 0.08609271)
+      # W4 = (0.95172413, 0.04827586)
+      #
+      # seed1 = (5/180 * D * W1.0) + (23/180 * D * W2.0) + (7/180 * D * W3.0) + (145/180 * D * W4.0) = 20834376.455342464
+      # seed2 = (5/180 * D * W1.1) + (23/180 * D * W2.1) + (7/180 * D * W3.1) + (145/180 * D * W4.1) = 1357404.1508219177
+      # imprecision due to rounding 8
+      assert result_contract.state["deposits"][trigger1["genesis_address"]]
+             |> hd()
+             |> Access.get("reward_amount")
+             |> Decimal.eq?("20834375.85808036")
+
+      assert result_contract.state["deposits"][trigger2["genesis_address"]]
+             |> hd()
+             |> Access.get("reward_amount")
+             |> Decimal.eq?("1357404.07616618")
     end
   end
 
