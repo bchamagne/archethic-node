@@ -618,30 +618,48 @@ defmodule VestingTest do
     end
   end
 
-  # test "scenario 1 math", %{contract: contract} do
-  #   state = %{}
+  describe "scenarios" do
+    test "a deposit is alone for 6 months", %{contract: contract} do
+      state = %{}
 
-  #   triggers = [
-  #     Trigger.new("seed", 1)
-  #     |> Trigger.named_action("deposit", %{"end_timestamp" => "6"})
-  #     |> Trigger.timestamp(@start_date)
-  #     |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1000)),
-  #     Trigger.new("seed2", 1)
-  #     |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
-  #     |> Trigger.timestamp(@start_date |> DateTime.add(180, :day))
-  #     |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1000)),
-  #   ]
+      trigger1 =
+        Trigger.new("seed", 1)
+        |> Trigger.named_action("deposit", %{
+          "end_timestamp" => @start_date |> DateTime.add(365, :day) |> DateTime.to_unix()
+        })
+        |> Trigger.timestamp(@start_date)
+        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1001))
 
-  #   mock_genesis_address(triggers)
+      trigger2 =
+        Trigger.new("seed2", 1)
+        |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+        |> Trigger.timestamp(@start_date |> DateTime.add(180, :day))
+        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1002))
 
-  #   result_contract =             contract
-  #            |> prepare_contract(state)
-  #            |> then(fn contract ->
-  #              Enum.reduce(triggers, contract, &trigger_contract(&2, &1))
-  #             end)
+      triggers = [trigger1, trigger2]
 
-  #   IO.inspect(contract.state)
-  # end
+      mock_genesis_address(triggers)
+
+      result_contract =
+        contract
+        |> prepare_contract(state, @initial_balance)
+        |> then(fn contract ->
+          Enum.reduce(triggers, contract, &trigger_contract(&2, &1))
+        end)
+
+      # formula: (180/365) * 45_000_000 = 22191780.821917806
+      # imprecision due to rounding 8 of ratio
+      assert result_contract.state["deposits"][trigger1["genesis_address"]]
+             |> hd()
+             |> Access.get("reward_amount")
+             |> Decimal.eq?("22191780.6")
+
+      assert result_contract.state["deposits"][trigger2["genesis_address"]]
+             |> hd()
+             |> Access.get("reward_amount")
+             |> Decimal.eq?(0)
+    end
+  end
 
   describe "Benchmark" do
     setup %{contract: contract} do
@@ -851,7 +869,15 @@ defmodule VestingTest do
     Enum.reduce(
       triggers,
       prepare_contract(contract, state, uco_balance),
-      &trigger_contract(&2, &1, opts)
+      fn trigger, contract ->
+        start = System.monotonic_time(:millisecond)
+        r = trigger_contract(contract, trigger, opts)
+        stop = System.monotonic_time(:millisecond)
+
+        IO.puts("=======#{stop - start}======")
+
+        r
+      end
     )
   end
 
