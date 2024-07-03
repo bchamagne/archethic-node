@@ -618,7 +618,32 @@ defmodule VestingTest do
     end
   end
 
-  describe "" do
+  # test "scenario 1 math", %{contract: contract} do
+  #   state = %{}
+
+  #   triggers = [
+  #     Trigger.new("seed", 1)
+  #     |> Trigger.named_action("deposit", %{"end_timestamp" => "6"})
+  #     |> Trigger.timestamp(@start_date)
+  #     |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1000)),
+  #     Trigger.new("seed2", 1)
+  #     |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+  #     |> Trigger.timestamp(@start_date |> DateTime.add(180, :day))
+  #     |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1000)),
+  #   ]
+
+  #   mock_genesis_address(triggers)
+
+  #   result_contract =             contract
+  #            |> prepare_contract(state)
+  #            |> then(fn contract ->
+  #              Enum.reduce(triggers, contract, &trigger_contract(&2, &1))
+  #             end)
+
+  #   IO.inspect(contract.state)
+  # end
+
+  describe "Benchmark" do
     setup %{contract: contract} do
       deposits =
         deposits_generator(200, deposits_per_seed: 1)
@@ -630,9 +655,8 @@ defmodule VestingTest do
       %{contract: contract}
     end
 
-    test "Time to run a claim with lots of deposits", %{
-      contract: contract
-    } do
+    @tag :benchmark
+    test "Time to run 200 deposits" do
       assert true
     end
   end
