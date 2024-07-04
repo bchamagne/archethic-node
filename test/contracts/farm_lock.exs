@@ -113,7 +113,7 @@ actions triggered_by: transaction, on: claim(deposit_index) do
   State.set("rewards_reserved", res.rewards_reserved - user_deposit.reward_amount)
 
   user_deposit = Map.set(user_deposit, "reward_amount", 0)
-  user_deposits = set_at(user_deposits, deposit_index, user_deposit)
+  user_deposits = List.set_at(user_deposits, deposit_index, user_deposit)
 
   deposits = Map.set(deposits, user_genesis_address, user_deposits)
   State.set("deposits", deposits)
@@ -182,7 +182,7 @@ actions triggered_by: transaction, on: withdraw(amount, deposit_index) do
   State.set("lp_tokens_deposited", lp_tokens_deposited - amount)
 
   if amount == user_deposit.amount do
-    user_deposits = delete_at(user_deposits, deposit_index)
+    user_deposits = List.delete_at(user_deposits, deposit_index)
 
     if List.size(user_deposits) > 0 do
       deposits = Map.set(deposits, user_genesis_address, user_deposits)
@@ -192,7 +192,7 @@ actions triggered_by: transaction, on: withdraw(amount, deposit_index) do
   else
     user_deposit = Map.set(user_deposit, "reward_amount", 0)
     user_deposit = Map.set(user_deposit, "amount", user_deposit.amount - amount)
-    user_deposits = set_at(user_deposits, deposit_index, user_deposit)
+    user_deposits = List.set_at(user_deposits, deposit_index, user_deposit)
     deposits = Map.set(deposits, user_genesis_address, user_deposits)
   end
 
@@ -259,7 +259,7 @@ actions triggered_by: transaction, on: relock(end_timestamp, deposit_index) do
 
   user_deposit = Map.set(user_deposit, "reward_amount", 0)
   user_deposit = Map.set(user_deposit, "end", end_timestamp)
-  user_deposits = set_at(user_deposits, deposit_index, user_deposit)
+  user_deposits = List.set_at(user_deposits, deposit_index, user_deposit)
 
   deposits = Map.set(deposits, user_genesis_address, user_deposits)
   State.set("deposits", deposits)
@@ -1052,36 +1052,4 @@ fun get_user_deposit(user_genesis_address, deposit_index) do
   deposits = State.get("deposits", Map.new())
   user_deposits = Map.get(deposits, user_genesis_address, [])
   List.at(user_deposits, deposit_index)
-end
-
-fun set_at(list, index, value) do
-  list2 = []
-  i = 0
-
-  for _ in list do
-    if i == index do
-      list2 = List.append(list2, value)
-    else
-      list2 = List.append(list2, List.at(list, i))
-    end
-
-    i = i + 1
-  end
-
-  list2
-end
-
-fun delete_at(list, index) do
-  list2 = []
-  i = 0
-
-  for _ in list do
-    if i != index do
-      list2 = List.append(list2, List.at(list, i))
-    end
-
-    i = i + 1
-  end
-
-  list2
 end
