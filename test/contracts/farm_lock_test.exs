@@ -620,81 +620,61 @@ defmodule VestingTest do
 
   describe "scenarios" do
     test "a deposit is alone for 6 months", %{contract: contract} do
-      state = %{}
+      actions = [
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 0,
+           level: "5",
+           seed: "seed"
+         }},
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 180,
+           level: "2",
+           seed: "seed2"
+         }}
+      ]
 
-      trigger1 =
-        Trigger.new("seed", 1)
-        |> Trigger.named_action("deposit", %{
-          "end_timestamp" => @start_date |> DateTime.add(365, :day) |> DateTime.to_unix()
-        })
-        |> Trigger.timestamp(@start_date)
-        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1000))
-
-      trigger2 =
-        Trigger.new("seed2", 1)
-        |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
-        |> Trigger.timestamp(@start_date |> DateTime.add(180, :day))
-        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1000))
-
-      triggers = [trigger1, trigger2]
-
-      mock_genesis_address(triggers)
-
-      result_contract =
-        contract
-        |> prepare_contract(state, @initial_balance)
-        |> then(fn contract ->
-          Enum.reduce(triggers, contract, &trigger_contract(&2, &1))
-        end)
+      result_contract = run_actions(actions, contract, %{}, @initial_balance)
 
       # formula: (180/365) * 45_000_000 = 22191780.821917806
-      # imprecision due to rounding 8 of ratio
-      assert result_contract.state["deposits"][trigger1["genesis_address"]]
-             |> hd()
-             |> Access.get("reward_amount")
-             |> Decimal.eq?("22191780.6")
-
-      assert result_contract.state["deposits"][trigger2["genesis_address"]]
-             |> hd()
-             |> Access.get("reward_amount")
-             |> Decimal.eq?(0)
+      # imprecision due to rounding 8
+      asserts_get_user_infos(result_contract, "seed", actions,
+        assert_fn: fn user_infos ->
+          assert 1 == length(user_infos)
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "22191780.6")
+        end
+      )
     end
 
     test "2 deposits with many level changes", %{contract: contract} do
-      state = %{}
+      actions = [
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 0,
+           level: "5",
+           seed: "seed"
+         }},
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 5,
+           level: "2",
+           seed: "seed2"
+         }},
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 180,
+           level: "2",
+           seed: "seed3"
+         }}
+      ]
 
-      trigger1 =
-        Trigger.new("seed", 1)
-        |> Trigger.named_action("deposit", %{
-          "end_timestamp" => @start_date |> DateTime.add(365, :day) |> DateTime.to_unix()
-        })
-        |> Trigger.timestamp(@start_date)
-        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1000))
-
-      trigger2 =
-        Trigger.new("seed2", 1)
-        |> Trigger.named_action("deposit", %{
-          "end_timestamp" => @start_date |> DateTime.add(35, :day) |> DateTime.to_unix()
-        })
-        |> Trigger.timestamp(@start_date |> DateTime.add(5, :day))
-        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1000))
-
-      trigger3 =
-        Trigger.new("seed3", 1)
-        |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
-        |> Trigger.timestamp(@start_date |> DateTime.add(180, :day))
-        |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1000))
-
-      triggers = [trigger1, trigger2, trigger3]
-
-      mock_genesis_address(triggers)
-
-      result_contract =
-        contract
-        |> prepare_contract(state, @initial_balance)
-        |> then(fn contract ->
-          Enum.reduce(triggers, contract, &trigger_contract(&2, &1))
-        end)
+      result_contract = run_actions(actions, contract, %{}, @initial_balance)
 
       # D = (180/365) * 45_000_000
       # periods: 0-5, 5-28, 28-35, 35-180
@@ -707,15 +687,51 @@ defmodule VestingTest do
       # seed1 = (5/180 * D * W1.0) + (23/180 * D * W2.0) + (7/180 * D * W3.0) + (145/180 * D * W4.0) = 20834376.455342464
       # seed2 = (5/180 * D * W1.1) + (23/180 * D * W2.1) + (7/180 * D * W3.1) + (145/180 * D * W4.1) = 1357404.1508219177
       # imprecision due to rounding 8
-      assert result_contract.state["deposits"][trigger1["genesis_address"]]
-             |> hd()
-             |> Access.get("reward_amount")
-             |> Decimal.eq?("20834375.85808036")
+      asserts_get_user_infos(result_contract, "seed", actions,
+        assert_fn: fn user_infos ->
+          assert 1 == length(user_infos)
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "20834375.85808036")
+        end
+      )
 
-      assert result_contract.state["deposits"][trigger2["genesis_address"]]
-             |> hd()
-             |> Access.get("reward_amount")
-             |> Decimal.eq?("1357404.07616618")
+      asserts_get_user_infos(result_contract, "seed2", actions,
+        assert_fn: fn user_infos ->
+          assert 1 == length(user_infos)
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "1357404.07616618")
+        end
+      )
+    end
+
+    test "year change", %{contract: contract} do
+      actions = [
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 0,
+           level: "7",
+           seed: "seed"
+         }},
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 370,
+           level: "5",
+           seed: "seed2"
+         }}
+      ]
+
+      result_contract = run_actions(actions, contract, %{}, @initial_balance)
+
+      asserts_get_user_infos(result_contract, "seed", actions,
+        assert_fn: fn user_infos ->
+          assert 1 == length(user_infos)
+
+          # period: 0-365, 365-370
+          # 45_000_000 + ((5/365)*22_500_000) = 45308219.17808219
+          # imprecision due to rounding 8
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "45308219.175")
+        end
+      )
     end
   end
 
@@ -927,15 +943,7 @@ defmodule VestingTest do
     Enum.reduce(
       triggers,
       prepare_contract(contract, state, uco_balance),
-      fn trigger, contract ->
-        start = System.monotonic_time(:millisecond)
-        r = trigger_contract(contract, trigger, opts)
-        stop = System.monotonic_time(:millisecond)
-
-        IO.puts("=======#{stop - start}======")
-
-        r
-      end
+      &trigger_contract(&2, &1, opts)
     )
   end
 
