@@ -378,7 +378,7 @@ fun get_user_transfer_amount() do
 end
 
 fun calculate_new_rewards() do
-  log("==================================")
+  # log("==================================")
   now = Time.now()
   day = 86400
   year = 31_536_000
@@ -388,7 +388,7 @@ fun calculate_new_rewards() do
   rewards_reserved = State.get("rewards_reserved", 0)
   last_calculation_timestamp = State.get("last_calculation_timestamp", @START_DATE)
 
-  log("#{(last_calculation_timestamp - @START_DATE) / 86400}->#{(now - @START_DATE) / 86400}")
+  # log("#{(last_calculation_timestamp - @START_DATE) / 86400}->#{(now - @START_DATE) / 86400}")
 
   if last_calculation_timestamp < now && last_calculation_timestamp < @END_DATE &&
        lp_tokens_deposited > 0 do
@@ -583,6 +583,10 @@ fun calculate_new_rewards() do
             end
 
             if current_end != year_period.start do
+              if current_level == nil do
+                current_level = "0"
+              end
+
               deposit_periods_for_year =
                 List.prepend(deposit_periods_for_year,
                   start: year_period.start,
@@ -686,9 +690,9 @@ fun calculate_new_rewards() do
       for period in Map.keys(deposits_per_period) do
         deposits_in_period = Map.get(deposits_per_period, period)
 
-        log(
-          "-period: #{(period.start - @START_DATE) / 86400}->#{(period.end - @START_DATE) / 86400}"
-        )
+        # log(
+        #   "-period: #{(period.start - @START_DATE) / 86400}->#{(period.end - @START_DATE) / 86400}"
+        # )
 
         amount_to_allocate_this_year =
           Map.get(amount_to_allocate_per_year, String.from_number(period.year))
@@ -702,7 +706,7 @@ fun calculate_new_rewards() do
             ((period.end - period.start) / year) +
             giveaway_for_period
 
-        log("--reward_to_allocate: #{reward_to_allocate}")
+        # log("--reward_to_allocate: #{reward_to_allocate}")
 
         total_weighted_lp_deposited = 0
         weighted_lp_deposited_per_level = Map.new()
@@ -776,7 +780,7 @@ fun calculate_new_rewards() do
       end
     end
 
-    log(reward_per_deposit: reward_per_deposit)
+    # log(reward_per_deposit: reward_per_deposit)
 
     time = monotonic()
 
