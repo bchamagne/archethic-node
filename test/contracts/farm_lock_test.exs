@@ -363,6 +363,29 @@ defmodule VestingTest do
              |> trigger_contract(trigger2)
   end
 
+  test "withdraw/2 should throw if deposit is locked", %{contract: contract} do
+    state = %{}
+
+    trigger1 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+    trigger2 =
+      Trigger.new("seed", 2)
+      |> Trigger.named_action("withdraw", %{"amount" => 1, "deposit_index" => 0})
+      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+
+    mock_genesis_address([trigger1, trigger2])
+
+    assert {:throw, 3004} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger1)
+             |> trigger_contract(trigger2)
+  end
+
   property "withdraw/2 should transfer the funds and update the state (withdraw everything)", %{
     contract: contract
   } do
@@ -420,7 +443,7 @@ defmodule VestingTest do
       withdraw =
         {:withdraw,
          %{
-           delay: deposit.delay + 1,
+           delay: 2000,
            seed: deposit.seed,
            amount: withdraw_amount,
            deposit_index: deposit.deposit_index
@@ -816,6 +839,35 @@ defmodule VestingTest do
         end
       )
     end
+
+    @tag :scenario
+    test "alone always", %{contract: contract} do
+      actions = [
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 0,
+           level: "0",
+           seed: "seed"
+         }},
+        {:withdraw,
+         %{
+           amount: Decimal.new(1000),
+           delay: 2000,
+           deposit_index: 0,
+           seed: "seed"
+         }}
+      ]
+
+      result_contract = run_actions(actions, contract, %{}, @initial_balance)
+
+      asserts_get_farm_infos(result_contract, actions,
+        assert_fn: fn farm_infos ->
+          assert farm_infos["remaining_rewards"] == 0
+          assert farm_infos["rewards_distributed"] == @initial_balance
+        end
+      )
+    end
   end
 
   describe "Benchmark" do
@@ -1185,19 +1237,21 @@ defmodule VestingTest do
     StreamData.constant(
       Enum.map(deposits, fn {:deposit, d} ->
         # index will always be 0 because it's sorted by delay
-        {:withdraw, %{delay: d.delay + 1, seed: d.seed, amount: d.amount, deposit_index: 0}}
+        {:withdraw, %{delay: 2000, seed: d.seed, amount: d.amount, deposit_index: 0}}
       end)
     )
   end
 
-  defp level_to_seconds("0"), do: 0 * 86400
-  defp level_to_seconds("1"), do: 7 * 86400
-  defp level_to_seconds("2"), do: 30 * 86400
-  defp level_to_seconds("3"), do: 90 * 86400
-  defp level_to_seconds("4"), do: 180 * 86400
-  defp level_to_seconds("5"), do: 365 * 86400
-  defp level_to_seconds("6"), do: 730 * 86400
-  defp level_to_seconds("7"), do: 1095 * 86400
+  defp level_to_days("0"), do: 0
+  defp level_to_days("1"), do: 7
+  defp level_to_days("2"), do: 30
+  defp level_to_days("3"), do: 90
+  defp level_to_days("4"), do: 180
+  defp level_to_days("5"), do: 365
+  defp level_to_days("6"), do: 730
+  defp level_to_days("7"), do: 1095
+
+  defp level_to_seconds(lvl), do: level_to_days(lvl) * 86400
 
   defp end_to_level(end_timestamp, time_now) do
     case end_timestamp |> DateTime.from_unix!() |> DateTime.diff(time_now) do
