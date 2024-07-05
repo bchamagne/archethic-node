@@ -619,6 +619,7 @@ defmodule VestingTest do
   end
 
   describe "scenarios" do
+    @tag :scenario
     test "a deposit is alone for 6 months", %{contract: contract} do
       actions = [
         {:deposit,
@@ -649,6 +650,7 @@ defmodule VestingTest do
       )
     end
 
+    @tag :scenario
     test "2 deposits with many level changes", %{contract: contract} do
       actions = [
         {:deposit,
@@ -690,18 +692,19 @@ defmodule VestingTest do
       asserts_get_user_infos(result_contract, "seed", actions,
         assert_fn: fn user_infos ->
           assert 1 == length(user_infos)
-          assert Decimal.eq?(hd(user_infos)["reward_amount"], "20834375.85808036")
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "20834375.60709506")
         end
       )
 
       asserts_get_user_infos(result_contract, "seed2", actions,
         assert_fn: fn user_infos ->
           assert 1 == length(user_infos)
-          assert Decimal.eq?(hd(user_infos)["reward_amount"], "1357404.07616618")
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "1357404.05891518")
         end
       )
     end
 
+    @tag :scenario
     test "2 deposits same user with many level changes", %{contract: contract} do
       actions = [
         {:deposit,
@@ -743,12 +746,13 @@ defmodule VestingTest do
       asserts_get_user_infos(result_contract, "seed", actions,
         assert_fn: fn user_infos ->
           assert 2 == length(user_infos)
-          assert Decimal.eq?(Enum.at(user_infos, 0)["reward_amount"], "20834375.85808036")
-          assert Decimal.eq?(Enum.at(user_infos, 1)["reward_amount"], "1357404.07616618")
+          assert Decimal.eq?(Enum.at(user_infos, 0)["reward_amount"], "20834375.60709506")
+          assert Decimal.eq?(Enum.at(user_infos, 1)["reward_amount"], "1357404.05891518")
         end
       )
     end
 
+    @tag :scenario
     test "year change", %{contract: contract} do
       actions = [
         {:deposit,
@@ -777,6 +781,38 @@ defmodule VestingTest do
           # 45_000_000 + ((5/365)*22_500_000) = 45308219.17808219
           # imprecision due to rounding 8
           assert Decimal.eq?(hd(user_infos)["reward_amount"], "45308219.175")
+        end
+      )
+    end
+
+    @tag :scenario
+    test "handle a gap at beginning", %{contract: contract} do
+      actions = [
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 5,
+           level: "7",
+           seed: "seed"
+         }},
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 365,
+           level: "5",
+           seed: "seed2"
+         }}
+      ]
+
+      result_contract = run_actions(actions, contract, %{}, @initial_balance)
+
+      asserts_get_user_infos(result_contract, "seed", actions,
+        assert_fn: fn user_infos ->
+          assert 1 == length(user_infos)
+
+          # period: 5-365
+          # 45_000_000
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "45000000")
         end
       )
     end

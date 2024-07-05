@@ -378,7 +378,6 @@ fun get_user_transfer_amount() do
 end
 
 fun calculate_new_rewards() do
-  # log("==================================")
   now = Time.now()
   day = 86400
   year = 31_536_000
@@ -386,9 +385,8 @@ fun calculate_new_rewards() do
   deposits = State.get("deposits", Map.new())
   lp_tokens_deposited = State.get("lp_tokens_deposited", 0)
   rewards_reserved = State.get("rewards_reserved", 0)
+  rewards_distributed = State.get("rewards_distributed", 0)
   last_calculation_timestamp = State.get("last_calculation_timestamp", @START_DATE)
-
-  # log("#{(last_calculation_timestamp - @START_DATE) / 86400}->#{(now - @START_DATE) / 86400}")
 
   if last_calculation_timestamp < now && last_calculation_timestamp < @END_DATE &&
        lp_tokens_deposited > 0 do
@@ -416,19 +414,19 @@ fun calculate_new_rewards() do
     weight_per_level = Map.set(weight_per_level, "7", 0.449)
 
     # TODO: IF NOW >= END_DATE ALLOCATE ALL REMAINING
-    amount_to_allocate_per_year = Map.new()
+    rewards_allocated_at_each_year_end = Map.new()
 
-    amount_to_allocate_per_year =
-      Map.set(amount_to_allocate_per_year, "1", @INITIAL_BALANCE * 0.5)
+    rewards_allocated_at_each_year_end =
+      Map.set(rewards_allocated_at_each_year_end, "1", @INITIAL_BALANCE * 0.5)
 
-    amount_to_allocate_per_year =
-      Map.set(amount_to_allocate_per_year, "2", @INITIAL_BALANCE * 0.25)
+    rewards_allocated_at_each_year_end =
+      Map.set(rewards_allocated_at_each_year_end, "2", @INITIAL_BALANCE * 0.75)
 
-    amount_to_allocate_per_year =
-      Map.set(amount_to_allocate_per_year, "3", @INITIAL_BALANCE * 0.125)
+    rewards_allocated_at_each_year_end =
+      Map.set(rewards_allocated_at_each_year_end, "3", @INITIAL_BALANCE * 0.875)
 
-    amount_to_allocate_per_year =
-      Map.set(amount_to_allocate_per_year, "4", @INITIAL_BALANCE * 0.125)
+    rewards_allocated_at_each_year_end =
+      Map.set(rewards_allocated_at_each_year_end, "4", @INITIAL_BALANCE)
 
     end_of_years = [
       [year: 1, timestamp: @START_DATE + year],
@@ -446,8 +444,6 @@ fun calculate_new_rewards() do
 
     current_year = 1
     current_year_end = @START_DATE + year
-
-    time = monotonic()
 
     for end_of_year in end_of_years do
       if now > end_of_year.timestamp do
@@ -485,8 +481,6 @@ fun calculate_new_rewards() do
       ]
     end
 
-    # log(time: monotonic() - time, label: "year_periods")
-
     # ================================================
     # CALCULATED AVAILABLE BALANCE
     # ================================================
@@ -509,7 +503,7 @@ fun calculate_new_rewards() do
     # ================================================
     time_elapsed_since_last_calc = now - last_calculation_timestamp
     time_remaining_until_farm_end = @END_DATE - last_calculation_timestamp
-    giveaways = rewards_balance + State.get("rewards_distributed", 0) - @INITIAL_BALANCE
+    giveaways = rewards_balance + rewards_distributed - @INITIAL_BALANCE
 
     giveaways_to_allocate =
       giveaways * (time_elapsed_since_last_calc / time_remaining_until_farm_end)
@@ -520,8 +514,6 @@ fun calculate_new_rewards() do
       # ================================================
       # CALCULATE THE PERIODS FOR EVERY DEPOSIT
       # ================================================
-
-      time = monotonic()
 
       for address in Map.keys(deposits) do
         user_deposits = Map.get(deposits, address)
@@ -610,13 +602,12 @@ fun calculate_new_rewards() do
         end
       end
 
-      # log(time: monotonic() - time, label: "deposit_periods")
       deposit_periods = List.sort_by(deposit_periods, "start")
 
       # ================================================
       # DETERMINE ALL THE PERIODS
       # ================================================
-      time = monotonic()
+
       start_years = []
 
       for deposit_period in deposit_periods do
@@ -655,12 +646,10 @@ fun calculate_new_rewards() do
           remaining_until_end_of_year: previous.remaining_until_end_of_year
         )
 
-      # log(time: monotonic() - time, label: "start_end_years")
-
       # ================================================
       # FOR EACH PERIOD DETERMINE THE DEPOSITS STATES
       # ================================================
-      time = monotonic()
+
       deposits_per_period = Map.new()
 
       for start_end_year in start_end_years do
@@ -682,36 +671,37 @@ fun calculate_new_rewards() do
         deposits_per_period = Map.set(deposits_per_period, start_end_year, deposits_in_period)
       end
 
-      # log(time: monotonic() - time, label: "deposits_per_period")
-
       # ================================================
       # FOR EACH PERIOD DETERMINE THE REWARD TO ALLOCATE FOR EACH LEVEL
       # ================================================
+      current_year_reward_accumulated = 0
+      previous_year_reward_accumulated = 0
+      previous_year = nil
+
       for period in Map.keys(deposits_per_period) do
+        if previous_year == nil || previous_year != period.year do
+          previous_year = period.year
+          previous_year_reward_accumulated = current_year_reward_accumulated
+          current_year_reward_accumulated = 0
+        end
+
         deposits_in_period = Map.get(deposits_per_period, period)
 
-        # log(
-        #   "-period: #{(period.start - @START_DATE) / 86400}->#{(period.end - @START_DATE) / 86400}"
-        # )
-
-        amount_to_allocate_this_year =
-          Map.get(amount_to_allocate_per_year, String.from_number(period.year))
+        rewards_allocated_at_year_end =
+          Map.get(rewards_allocated_at_each_year_end, String.from_number(period.year))
 
         giveaway_for_period =
           giveaways_to_allocate * ((period.end - period.start) / time_elapsed_since_last_calc)
 
         # rounding imprecision here due to max 8 decimals in the ratio
         reward_to_allocate =
-          amount_to_allocate_this_year *
-            ((period.end - period.start) / year) +
+          (rewards_allocated_at_year_end - rewards_distributed - rewards_reserved -
+             previous_year_reward_accumulated) *
+            ((period.end - period.start) / period.remaining_until_end_of_year) +
             giveaway_for_period
-
-        # log("--reward_to_allocate: #{reward_to_allocate}")
 
         total_weighted_lp_deposited = 0
         weighted_lp_deposited_per_level = Map.new()
-
-        # log(deposits_in_period: deposits_in_period)
 
         for deposit in deposits_in_period do
           current_weighted_amount = Map.get(weighted_lp_deposited_per_level, deposit.level, 0)
@@ -750,8 +740,6 @@ fun calculate_new_rewards() do
           end
         end
 
-        time = monotonic()
-
         for deposit in deposits_in_period do
           deposit_key = [user_address: deposit.user_address, deposit_index: deposit.deposit_index]
           previous_reward = Map.get(reward_per_deposit, deposit_key, 0)
@@ -770,19 +758,15 @@ fun calculate_new_rewards() do
                 reward_to_allocate_for_level
           end
 
+          current_year_reward_accumulated = current_year_reward_accumulated + reward
           reward_per_deposit = Map.set(reward_per_deposit, deposit_key, previous_reward + reward)
         end
 
-        # log(
         # time: monotonic() - time,
         #  label: "reward_per_deposit"
         # )
       end
     end
-
-    # log(reward_per_deposit: reward_per_deposit)
-
-    time = monotonic()
 
     for address in Map.keys(deposits) do
       user_deposits = Map.get(deposits, address)
@@ -807,8 +791,6 @@ fun calculate_new_rewards() do
 
       deposits = Map.set(deposits, address, user_deposits_updated)
     end
-
-    # log(time: monotonic() - time, label: "deposits", size: Map.size(deposits))
   end
 
   [
