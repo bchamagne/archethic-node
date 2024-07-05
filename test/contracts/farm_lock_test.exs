@@ -1279,9 +1279,10 @@ defmodule VestingTest do
 
   defp withdraws_generator(deposits, :full) do
     StreamData.constant(
-      Enum.map(deposits, fn {:deposit, d} ->
+      deposits
+      |> Enum.map(fn {:deposit, d} ->
         # index will always be 0 because it's sorted by delay
-        {:withdraw, %{delay: 2000, seed: d.seed, amount: d.amount, deposit_index: 0}}
+        {:withdraw, %{delay: 2000 + d.delay, seed: d.seed, amount: d.amount, deposit_index: 0}}
       end)
     )
   end

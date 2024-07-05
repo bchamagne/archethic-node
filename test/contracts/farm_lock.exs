@@ -600,18 +600,18 @@ fun calculate_new_rewards() do
       # DETERMINE ALL THE PERIODS STARTS
       # ================================================
 
-      start_years = []
+      start_periods = []
 
       for deposit_period in deposit_periods do
-        start_years =
-          List.append(start_years,
+        start_periods =
+          List.append(start_periods,
             start: deposit_period.start,
             year: deposit_period.year,
             remaining_until_end_of_year: deposit_period.remaining_until_end_of_year
           )
       end
 
-      start_years = List.uniq(start_years)
+      start_periods = List.uniq(start_periods)
 
       # ================================================
       # CREATE PERIODS
@@ -620,18 +620,18 @@ fun calculate_new_rewards() do
       start_end_years = []
       previous = nil
 
-      for start_year in start_years do
+      for start_period in start_periods do
         if previous != nil do
           start_end_years =
             List.append(start_end_years,
               start: previous.start,
-              end: start_year.start,
+              end: start_period.start,
               year: previous.year,
               remaining_until_end_of_year: previous.remaining_until_end_of_year
             )
         end
 
-        previous = start_year
+        previous = start_period
       end
 
       max_end = now
@@ -680,7 +680,10 @@ fun calculate_new_rewards() do
       previous_year_reward_accumulated = 0
       previous_year = nil
 
-      for period in Map.keys(deposits_per_period) do
+      periods = Map.keys(deposits_per_period)
+      periods = List.sort_by(periods, "start")
+
+      for period in periods do
         if previous_year == nil || previous_year != period.year do
           previous_year = period.year
 
