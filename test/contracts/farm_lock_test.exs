@@ -868,6 +868,50 @@ defmodule VestingTest do
         end
       )
     end
+
+    @tag :scenario
+    test "withdraw all", %{contract: contract} do
+      actions = [
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 0,
+           level: "0",
+           seed: "seed"
+         }},
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 5,
+           level: "0",
+           seed: "seed2"
+         }},
+        {:withdraw,
+         %{
+           amount: Decimal.new(1000),
+           delay: 10,
+           deposit_index: 0,
+           seed: "seed"
+         }},
+        {:withdraw,
+         %{
+           amount: Decimal.new(1000),
+           delay: 15,
+           deposit_index: 0,
+           seed: "seed2"
+         }}
+      ]
+
+      result_contract = run_actions(actions, contract, %{}, @initial_balance)
+
+      asserts_get_farm_infos(result_contract, actions,
+        assert_fn: fn farm_infos ->
+          # 15/365 * 45_000_000 = 1849315.0684931506
+          assert Decimal.eq?(farm_infos["rewards_distributed"], "1849314.36531688")
+          assert Decimal.eq?(farm_infos["remaining_rewards"], "88150685.63468312")
+        end
+      )
+    end
   end
 
   describe "Benchmark" do
