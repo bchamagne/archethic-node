@@ -907,7 +907,58 @@ defmodule VestingTest do
       asserts_get_farm_infos(result_contract, actions,
         assert_fn: fn farm_infos ->
           # 15/365 * 45_000_000 = 1849315.0684931506
+          # 90_000_000 -  1849315.0684931506 = 88150684.93150684
           assert Decimal.eq?(farm_infos["rewards_distributed"], "1849314.36531688")
+          assert Decimal.eq?(farm_infos["remaining_rewards"], "88150685.63468312")
+        end
+      )
+    end
+
+    @tag :scenario
+    test "claiming should distribute rewards", %{contract: contract} do
+      actions = [
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 0,
+           level: "0",
+           seed: "seed"
+         }},
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 5,
+           level: "0",
+           seed: "seed2"
+         }},
+        {:claim,
+         %{
+           delay: 10,
+           deposit_index: 0,
+           seed: "seed"
+         }},
+        {:claim,
+         %{
+           delay: 15,
+           deposit_index: 0,
+           seed: "seed2"
+         }}
+      ]
+
+      result_contract = run_actions(actions, contract, %{}, @initial_balance)
+
+      asserts_get_farm_infos(result_contract, actions,
+        assert_fn: fn farm_infos ->
+          # 15/365 * 45_000_000 = 1849315.0684931506
+          # 90_000_000 -  1849315.0684931506 = 88150684.93150684
+          assert Decimal.eq?(
+                   Decimal.add(
+                     farm_infos["rewards_distributed"],
+                     result_contract.state["rewards_reserved"]
+                   ),
+                   "1849314.36531688"
+                 )
+
           assert Decimal.eq?(farm_infos["remaining_rewards"], "88150685.63468312")
         end
       )
