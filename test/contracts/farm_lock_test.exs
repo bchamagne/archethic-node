@@ -809,6 +809,56 @@ defmodule VestingTest do
     end
 
     @tag :scenario
+    test "handle 0 deposit for a period", %{contract: contract} do
+      actions = [
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 0,
+           level: "0",
+           seed: "seed"
+         }},
+        {:withdraw,
+         %{
+           amount: Decimal.new(1000),
+           delay: 5,
+           deposit_index: 0,
+           seed: "seed"
+         }},
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 180,
+           level: "0",
+           seed: "seed2"
+         }},
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 365,
+           level: "0",
+           seed: "seed3"
+         }}
+      ]
+
+      result_contract = run_actions(actions, contract, %{}, @initial_balance)
+
+      # D = 45_000_000
+      # periods: 0-5, 180-365
+      #
+      # seed1 = 5/365 * D = 616438.3561643836
+      # seed2 = 360/365 * D = 44383561.64383562
+      # imprecision due to rounding 8
+
+      asserts_get_farm_infos(result_contract, actions,
+        assert_fn: fn farm_infos ->
+          # 90_000_000 - 50%
+          assert farm_infos["remaining_rewards"] == 45_000_000
+        end
+      )
+    end
+
+    @tag :scenario
     test "year change", %{contract: contract} do
       actions = [
         {:deposit,
