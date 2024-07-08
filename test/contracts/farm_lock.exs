@@ -204,6 +204,9 @@ actions triggered_by: transaction, on: withdraw(amount, deposit_index) do
 end
 
 condition triggered_by: transaction, on: relock(end_timestamp, deposit_index) do
+  now = Time.now()
+  day = @SECONDS_IN_DAY
+
   if end_timestamp == "max" do
     end_timestamp = @END_DATE
   end
@@ -223,8 +226,41 @@ condition triggered_by: transaction, on: relock(end_timestamp, deposit_index) do
     throw(message: "relock's end cannot be past farm's end", code: 4003)
   end
 
-  if user_deposit["end"] >= end_timestamp do
-    throw(message: "relock's end cannot be inferior or equal to deposit's end", code: 4004)
+  available_levels = Map.new()
+  available_levels = Map.set(available_levels, "0", now + 0)
+  available_levels = Map.set(available_levels, "1", now + 7 * day)
+  available_levels = Map.set(available_levels, "2", now + 30 * day)
+  available_levels = Map.set(available_levels, "3", now + 90 * day)
+  available_levels = Map.set(available_levels, "4", now + 180 * day)
+  available_levels = Map.set(available_levels, "5", now + 365 * day)
+  available_levels = Map.set(available_levels, "6", now + 730 * day)
+  available_levels = Map.set(available_levels, "7", now + 1095 * day)
+
+  relock_level = nil
+  deposit_level = nil
+
+  for l in Map.keys(available_levels) do
+    until = Map.get(available_levels, l)
+
+    if deposit_level == nil && user_deposit.end <= until do
+      deposit_level = l
+    end
+
+    if relock_level == nil && end_timestamp <= until do
+      relock_level = l
+    end
+  end
+
+  if relock_level == nil do
+    relock_level = "7"
+  end
+
+  if deposit_level == nil do
+    deposit_level = "7"
+  end
+
+  if relock_level <= deposit_level do
+    throw(message: "Relock's level must be greater than current level", code: 4004)
   end
 
   true

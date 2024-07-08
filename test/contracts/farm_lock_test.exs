@@ -592,21 +592,60 @@ defmodule VestingTest do
              |> trigger_contract(trigger2)
   end
 
-  test "relock/2 should throw if end_timestamp is equal to previous deposit's end", %{
+  test "relock/2 should throw if level == current level", %{
     contract: contract
   } do
     state = %{}
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
-      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(370 * @seconds_in_day) |> DateTime.to_unix()
+      })
+      |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
     trigger2 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("relock", %{"end_timestamp" => "max", "deposit_index" => 0})
-      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+      |> Trigger.named_action("relock", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(375 * @seconds_in_day) |> DateTime.to_unix(),
+        "deposit_index" => 0
+      })
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+
+    mock_genesis_address([trigger1, trigger2])
+
+    assert {:throw, 4004} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger1)
+             |> trigger_contract(trigger2)
+  end
+
+  test "relock/2 should throw if level < current level", %{
+    contract: contract
+  } do
+    state = %{}
+
+    trigger1 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(370 * @seconds_in_day) |> DateTime.to_unix()
+      })
+      |> Trigger.timestamp(@start_date)
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+    trigger2 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("relock", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(50 * @seconds_in_day) |> DateTime.to_unix(),
+        "deposit_index" => 0
+      })
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
 
     mock_genesis_address([trigger1, trigger2])
 
@@ -622,7 +661,7 @@ defmodule VestingTest do
   } do
     check all(
             count <- StreamData.integer(1..10),
-            deposits <- deposits_generator(count),
+            deposits <- deposits_generator(count, max_level: 5),
             {:deposit, deposit_to_relock} <- StreamData.member_of(deposits)
           ) do
       relock = %{
@@ -1376,8 +1415,10 @@ defmodule VestingTest do
     |> StreamData.map(&Decimal.round(&1, 8))
   end
 
-  defp level_generator() do
-    StreamData.integer(0..7)
+  defp level_generator(opts) do
+    max_level = Keyword.get(opts, :max_level, 7)
+
+    StreamData.integer(0..max_level)
     |> StreamData.map(&Integer.to_string/1)
   end
 
@@ -1407,7 +1448,7 @@ defmodule VestingTest do
   end
 
   defp deposit_generator(seed, opts) do
-    {delay_generator(), StreamData.constant(seed), amount_generator(opts), level_generator()}
+    {delay_generator(), StreamData.constant(seed), amount_generator(opts), level_generator(opts)}
     |> StreamData.tuple()
     |> StreamData.map(fn {delay, seed, amount, level} ->
       {:deposit,
