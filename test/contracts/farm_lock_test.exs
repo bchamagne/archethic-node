@@ -11,12 +11,14 @@ defmodule VestingTest do
   @master_address "00000000000000000000000000000000000000000000000000000000000000000004"
   @farm_address "00000000000000000000000000000000000000000000000000000000000000000005"
   @invalid_address "00000000000000000000000000000000000000000000000000000000000000000006"
-  @start_date ~U[2024-07-17T00:00:00Z]
-  @end_date ~U[2028-07-17T00:00:00Z]
   @initial_balance 90_000_000
+  @seconds_in_day 86400
+  @start_date ~U[2024-07-17T00:00:00Z]
+  @end_date @start_date |> DateTime.add(4 * 365 * @seconds_in_day)
 
   setup do
     constants = [
+      {"@SECONDS_IN_DAY", :int, @seconds_in_day},
       {"@START_DATE", :date, @start_date},
       {"@END_DATE", :date, @end_date},
       {"@INITIAL_BALANCE", :int, @initial_balance},
@@ -272,7 +274,7 @@ defmodule VestingTest do
             deposits <- deposits_generator(count),
             {:deposit, deposit} <- StreamData.member_of(deposits)
           ) do
-      deposit_duration_in_day = max(1, div(level_to_seconds(deposit.level), 86400))
+      deposit_duration_in_day = max(1, div(level_to_seconds(deposit.level), @seconds_in_day))
 
       claim =
         {:claim,
@@ -993,7 +995,7 @@ defmodule VestingTest do
             actions
             |> Enum.reduce(0, fn {_, %{delay: delay}}, acc -> max(delay, acc) end)
 
-          DateTime.add(@start_date, max_delay, :day)
+          DateTime.add(@start_date, max_delay * @seconds_in_day, :second)
 
         datetime ->
           datetime
@@ -1101,7 +1103,7 @@ defmodule VestingTest do
             actions
             |> Enum.reduce(0, fn {_, %{delay: delay}}, acc -> max(delay, acc) end)
 
-          DateTime.add(@start_date, max_delay, :day)
+          DateTime.add(@start_date, max_delay * @seconds_in_day, :second)
 
         datetime ->
           datetime
@@ -1188,7 +1190,7 @@ defmodule VestingTest do
           :deposit ->
             start_timestamp =
               @start_date
-              |> DateTime.add(payload.delay, :day)
+              |> DateTime.add(payload.delay * @seconds_in_day, :second)
 
             end_timestamp =
               start_timestamp
@@ -1234,7 +1236,7 @@ defmodule VestingTest do
       index = Map.get(index_acc, seed, 1)
       index_acc = Map.put(index_acc, seed, index + 1)
 
-      timestamp = @start_date |> DateTime.add(payload.delay, :day)
+      timestamp = @start_date |> DateTime.add(payload.delay * @seconds_in_day, :second)
 
       trigger =
         case action do
@@ -1347,16 +1349,16 @@ defmodule VestingTest do
   defp level_to_days("6"), do: 730
   defp level_to_days("7"), do: 1095
 
-  defp level_to_seconds(lvl), do: level_to_days(lvl) * 86400
+  defp level_to_seconds(lvl), do: level_to_days(lvl) * @seconds_in_day
 
   defp end_to_level(end_timestamp, time_now) do
     case end_timestamp |> DateTime.from_unix!() |> DateTime.diff(time_now) do
-      diff when diff > 730 * 86400 -> "7"
-      diff when diff > 365 * 86400 -> "6"
-      diff when diff > 180 * 86400 -> "5"
-      diff when diff > 90 * 86400 -> "4"
-      diff when diff > 30 * 86400 -> "3"
-      diff when diff > 7 * 86400 -> "2"
+      diff when diff > 730 * @seconds_in_day -> "7"
+      diff when diff > 365 * @seconds_in_day -> "6"
+      diff when diff > 180 * @seconds_in_day -> "5"
+      diff when diff > 90 * @seconds_in_day -> "4"
+      diff when diff > 30 * @seconds_in_day -> "3"
+      diff when diff > 7 * @seconds_in_day -> "2"
       diff when diff > 0 -> "1"
       _ -> "0"
     end
