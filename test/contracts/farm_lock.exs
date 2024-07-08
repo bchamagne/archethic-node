@@ -357,16 +357,24 @@ fun calculate_new_rewards() do
     rewards_allocated_at_each_year_end = Map.new()
 
     rewards_allocated_at_each_year_end =
-      Map.set(rewards_allocated_at_each_year_end, "1", @INITIAL_BALANCE * 0.5)
+      Map.set(rewards_allocated_at_each_year_end, "1", @REWARDS_YEAR_1)
 
     rewards_allocated_at_each_year_end =
-      Map.set(rewards_allocated_at_each_year_end, "2", @INITIAL_BALANCE * 0.75)
+      Map.set(rewards_allocated_at_each_year_end, "2", @REWARDS_YEAR_1 + @REWARDS_YEAR_2)
 
     rewards_allocated_at_each_year_end =
-      Map.set(rewards_allocated_at_each_year_end, "3", @INITIAL_BALANCE * 0.875)
+      Map.set(
+        rewards_allocated_at_each_year_end,
+        "3",
+        @REWARDS_YEAR_1 + @REWARDS_YEAR_2 + @REWARDS_YEAR_3
+      )
 
     rewards_allocated_at_each_year_end =
-      Map.set(rewards_allocated_at_each_year_end, "4", @INITIAL_BALANCE)
+      Map.set(
+        rewards_allocated_at_each_year_end,
+        "4",
+        @REWARDS_YEAR_1 + @REWARDS_YEAR_2 + @REWARDS_YEAR_3 + @REWARDS_YEAR_4
+      )
 
     end_of_years = [
       [year: 1, timestamp: @START_DATE + year],
@@ -435,7 +443,10 @@ fun calculate_new_rewards() do
     # ================================================
     time_elapsed_since_last_calc = now - last_calculation_timestamp
     time_remaining_until_farm_end = @END_DATE - last_calculation_timestamp
-    giveaways = rewards_balance + rewards_distributed - @INITIAL_BALANCE
+
+    giveaways =
+      rewards_balance + rewards_distributed -
+        (@REWARDS_YEAR_1 + @REWARDS_YEAR_2 + @REWARDS_YEAR_3 + @REWARDS_YEAR_4)
 
     giveaways_to_allocate =
       giveaways * (time_elapsed_since_last_calc / time_remaining_until_farm_end)

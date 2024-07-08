@@ -11,7 +11,7 @@ defmodule VestingTest do
   @master_address "00000000000000000000000000000000000000000000000000000000000000000004"
   @farm_address "00000000000000000000000000000000000000000000000000000000000000000005"
   @invalid_address "00000000000000000000000000000000000000000000000000000000000000000006"
-  @initial_balance 90_000_000
+  @initial_balance 87_500_000
   @seconds_in_day 86400
   @start_date ~U[2024-07-17T00:00:00Z]
   @end_date @start_date |> DateTime.add(4 * 365 * @seconds_in_day)
@@ -21,7 +21,10 @@ defmodule VestingTest do
       {"@SECONDS_IN_DAY", :int, @seconds_in_day},
       {"@START_DATE", :date, @start_date},
       {"@END_DATE", :date, @end_date},
-      {"@INITIAL_BALANCE", :int, @initial_balance},
+      {"@REWARDS_YEAR_1", :int, 45_000_000},
+      {"@REWARDS_YEAR_2", :int, 22_500_000},
+      {"@REWARDS_YEAR_3", :int, 11_250_000},
+      {"@REWARDS_YEAR_4", :int, 8_750_000},
       {"@REWARD_TOKEN", :string, "UCO"},
       {"@FARM_ADDRESS", :string, @farm_address},
       {"@LP_TOKEN_ADDRESS", :string, @lp_token_address},
@@ -852,8 +855,8 @@ defmodule VestingTest do
 
       asserts_get_farm_infos(result_contract, actions,
         assert_fn: fn farm_infos ->
-          # 90_000_000 - 50%
-          assert farm_infos["remaining_rewards"] == 45_000_000
+          # 87_500_000 - 45_000_000
+          assert farm_infos["remaining_rewards"] == 42_500_000
         end
       )
     end
@@ -990,9 +993,9 @@ defmodule VestingTest do
       asserts_get_farm_infos(result_contract, actions,
         assert_fn: fn farm_infos ->
           # 15/365 * 45_000_000 = 1849315.0684931506
-          # 90_000_000 -  1849315.0684931506 = 88150684.93150684
+          # 87500000 -  1849315.0684931506 = 85650684.93150684
           assert Decimal.eq?(farm_infos["rewards_distributed"], "1849314.36531688")
-          assert Decimal.eq?(farm_infos["remaining_rewards"], "88150685.63468312")
+          assert Decimal.eq?(farm_infos["remaining_rewards"], "85650685.63468312")
         end
       )
     end
@@ -1033,7 +1036,7 @@ defmodule VestingTest do
       asserts_get_farm_infos(result_contract, actions,
         assert_fn: fn farm_infos ->
           # 15/365 * 45_000_000 = 1849315.0684931506
-          # 90_000_000 -  1849315.0684931506 = 88150684.93150684
+          # 87_500_000 -  1849315.0684931506 = 85650684.93150684
           assert Decimal.eq?(
                    Decimal.add(
                      farm_infos["rewards_distributed"],
@@ -1042,7 +1045,7 @@ defmodule VestingTest do
                    "1849314.36531688"
                  )
 
-          assert Decimal.eq?(farm_infos["remaining_rewards"], "88150685.63468312")
+          assert Decimal.eq?(farm_infos["remaining_rewards"], "85650685.63468312")
         end
       )
     end
