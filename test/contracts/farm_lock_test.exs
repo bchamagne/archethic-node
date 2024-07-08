@@ -676,6 +676,37 @@ defmodule VestingTest do
     end
 
     @tag :scenario
+    test "giveaway is also distributed linearly", %{contract: contract} do
+      actions = [
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 0,
+           level: "5",
+           seed: "seed"
+         }},
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 180,
+           level: "2",
+           seed: "seed2"
+         }}
+      ]
+
+      result_contract = run_actions(actions, contract, %{}, @initial_balance + 4_000_000)
+
+      # formula: ((180/365) * 45_000_000) + ((180/(365*4)) * 4_000_000) = 22684931.50684931
+      # imprecision due to rounding 8
+      asserts_get_user_infos(result_contract, "seed", actions,
+        assert_fn: fn user_infos ->
+          assert 1 == length(user_infos)
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "22684931.28")
+        end
+      )
+    end
+
+    @tag :scenario
     test "2 deposits with many level changes", %{contract: contract} do
       actions = [
         {:deposit,
