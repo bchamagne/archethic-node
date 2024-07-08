@@ -11,7 +11,11 @@ defmodule VestingTest do
   @master_address "00000000000000000000000000000000000000000000000000000000000000000004"
   @farm_address "00000000000000000000000000000000000000000000000000000000000000000005"
   @invalid_address "00000000000000000000000000000000000000000000000000000000000000000006"
-  @initial_balance 87_500_000
+  @reward_year_1 45_000_000
+  @reward_year_2 22_500_000
+  @reward_year_3 11_250_000
+  @reward_year_4 8_750_000
+  @initial_balance @reward_year_1 + @reward_year_2 + @reward_year_3 + @reward_year_4
   @seconds_in_day 86400
   @start_date ~U[2024-07-17T00:00:00Z]
   @end_date @start_date |> DateTime.add(4 * 365 * @seconds_in_day)
@@ -21,10 +25,10 @@ defmodule VestingTest do
       {"@SECONDS_IN_DAY", :int, @seconds_in_day},
       {"@START_DATE", :date, @start_date},
       {"@END_DATE", :date, @end_date},
-      {"@REWARDS_YEAR_1", :int, 45_000_000},
-      {"@REWARDS_YEAR_2", :int, 22_500_000},
-      {"@REWARDS_YEAR_3", :int, 11_250_000},
-      {"@REWARDS_YEAR_4", :int, 8_750_000},
+      {"@REWARDS_YEAR_1", :int, @reward_year_1},
+      {"@REWARDS_YEAR_2", :int, @reward_year_2},
+      {"@REWARDS_YEAR_3", :int, @reward_year_3},
+      {"@REWARDS_YEAR_4", :int, @reward_year_4},
       {"@REWARD_TOKEN", :string, "UCO"},
       {"@FARM_ADDRESS", :string, @farm_address},
       {"@LP_TOKEN_ADDRESS", :string, @lp_token_address},
@@ -1135,7 +1139,7 @@ defmodule VestingTest do
              |> Enum.reduce(0, &Decimal.add(&1["rewards_allocated"], &2))
              |> then(fn total_rewards_allocated ->
                # we can't compare directly because the rewards_allocated are not precise
-               Decimal.div(uco_balance, total_rewards_allocated)
+               Decimal.div(reward_allocated_at_year(time_now), total_rewards_allocated)
                |> Decimal.round()
                |> Decimal.eq?(1)
              end)
@@ -1447,6 +1451,22 @@ defmodule VestingTest do
       diff when diff > 7 * @seconds_in_day -> "2"
       diff when diff > 0 -> "1"
       _ -> "0"
+    end
+  end
+
+  defp reward_allocated_at_year(now) do
+    cond do
+      DateTime.compare(now, @start_date |> DateTime.add(365 * @seconds_in_day)) in [:lt, :eq] ->
+        @reward_year_1
+
+      DateTime.compare(now, @start_date |> DateTime.add(2 * 365 * @seconds_in_day)) in [:lt, :eq] ->
+        @reward_year_2
+
+      DateTime.compare(now, @start_date |> DateTime.add(3 * 365 * @seconds_in_day)) in [:lt, :eq] ->
+        @reward_year_3
+
+      true ->
+        @reward_year_4
     end
   end
 end
