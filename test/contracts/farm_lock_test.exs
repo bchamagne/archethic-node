@@ -51,14 +51,16 @@ defmodule VestingTest do
              |> trigger_contract(trigger)
   end
 
-  test "deposit/1 should throw when it's transfer to the farm is 0", %{contract: contract} do
+  test "deposit/1 should throw when it's transfer to the farm is less than minimum", %{
+    contract: contract
+  } do
     state = %{}
 
     trigger =
       Trigger.new()
       |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
       |> Trigger.timestamp(@start_date)
-      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(0))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("0.0000014"))
 
     assert {:throw, 1002} =
              contract
@@ -244,7 +246,7 @@ defmodule VestingTest do
 
     trigger0 =
       Trigger.new("seed2", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "0"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("999999999999"))
 
@@ -252,7 +254,7 @@ defmodule VestingTest do
       Trigger.new("seed", 1)
       |> Trigger.named_action("deposit", %{"end_timestamp" => "0"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
-      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("0.00000001"))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("0.00000143"))
 
     trigger2 =
       Trigger.new("seed", 2)
@@ -440,7 +442,7 @@ defmodule VestingTest do
   } do
     check all(
             count <- StreamData.integer(1..10),
-            deposits <- deposits_generator(count, min_amount: 0.0000001),
+            deposits <- deposits_generator(count),
             {:deposit, deposit} <- StreamData.member_of(deposits)
           ) do
       withdraw_amount = Decimal.div(deposit.amount, 2) |> Decimal.round(8)
@@ -1363,7 +1365,7 @@ defmodule VestingTest do
   defp amount_generator(opts) do
     # no need to generate a number bigger than 2 ** 64
     StreamData.float(
-      min: Keyword.get(opts, :min_amount, 0.00000001),
+      min: Keyword.get(opts, :min_amount, 0.00000143),
       max: Keyword.get(opts, :max_amount, 18_446_744_073_709_551_615.0)
     )
     |> StreamData.map(&Decimal.from_float/1)

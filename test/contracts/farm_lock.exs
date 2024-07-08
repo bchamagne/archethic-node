@@ -17,8 +17,8 @@ condition triggered_by: transaction, on: deposit(end_timestamp) do
     throw(message: "deposit's end cannot be greater than farm's end", code: 1005)
   end
 
-  if get_user_transfer_amount() <= 0 do
-    throw(message: "deposit's amount must greater than 0", code: 1002)
+  if get_user_transfer_amount() < 0.00000143 do
+    throw(message: "deposit's minimum amount is 0.00000143", code: 1002)
   end
 
   true
