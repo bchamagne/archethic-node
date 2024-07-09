@@ -4,7 +4,7 @@ defmodule VestingTest do
 
   import InterpreterCase
 
-  @code File.read!("./test/contracts/farm_lock.exs")
+  @code File.read!("/Users/bastien/Documents/archethic-dex/contracts/contracts/farm_lock.exs")
   @lp_token_address "00000000000000000000000000000000000000000000000000000000000000000001"
   @factory_address "00000000000000000000000000000000000000000000000000000000000000000002"
   @router_address "00000000000000000000000000000000000000000000000000000000000000000003"
@@ -1000,6 +1000,36 @@ defmodule VestingTest do
       )
     end
 
+    # @tag :scenario
+    # test "alone always (with less than supposed balance)", %{contract: contract} do
+    #   actions = [
+    #     {:deposit,
+    #      %{
+    #        amount: Decimal.new(1000),
+    #        delay: 0,
+    #        level: "0",
+    #        seed: "seed"
+    #      }},
+    #     {:withdraw,
+    #      %{
+    #        amount: Decimal.new(1000),
+    #        delay: 2000,
+    #        deposit_index: 0,
+    #        seed: "seed"
+    #      }}
+    #   ]
+
+    #   result_contract = run_actions(actions, contract, %{}, @initial_balance - 12)
+    #   IO.inspect(state: result_contract.state, balance: result_contract.uco_balance)
+
+    #   asserts_get_farm_infos(result_contract, actions,
+    #     assert_fn: fn farm_infos ->
+    #       assert farm_infos["remaining_rewards"] == 0
+    #       assert farm_infos["rewards_distributed"] == @initial_balance
+    #     end
+    #   )
+    # end
+
     @tag :scenario
     test "withdraw all", %{contract: contract} do
       actions = [
@@ -1348,8 +1378,15 @@ defmodule VestingTest do
             end)
 
           :relock ->
+            start_timestamp =
+              @start_date
+              |> DateTime.add(payload.delay * @seconds_in_day, :second)
+              |> DateTime.to_unix()
+
             List.update_at(user_deposits, payload.deposit_index, fn d ->
-              Map.put(d, :end_timestamp, payload.end_timestamp)
+              d
+              |> Map.put(:start_timestamp, start_timestamp)
+              |> Map.put(:end_timestamp, payload.end_timestamp)
             end)
         end
 
