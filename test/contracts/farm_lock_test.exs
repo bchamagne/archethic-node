@@ -120,6 +120,23 @@ defmodule VestingTest do
              |> trigger_contract(trigger)
   end
 
+  test "deposit/1 should throw when end_timestamp is in the past", %{contract: contract} do
+    state = %{}
+
+    trigger =
+      Trigger.new()
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" => @start_date |> DateTime.to_unix()
+      })
+      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(100))
+
+    assert {:throw, 1006} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger)
+  end
+
   property "deposit/1 should accept deposits if the farm hasn't started yet", %{
     contract: contract
   } do
@@ -256,7 +273,7 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "0"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("0.00000143"))
 
@@ -494,7 +511,9 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => DateTime.to_unix(@start_date)})
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" => DateTime.to_unix(@start_date |> DateTime.add(1))
+      })
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -517,7 +536,9 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => @start_date |> DateTime.to_unix()})
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" => @start_date |> DateTime.add(1) |> DateTime.to_unix()
+      })
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -543,7 +564,9 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => @start_date |> DateTime.to_unix()})
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" => @start_date |> DateTime.add(1) |> DateTime.to_unix()
+      })
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -571,7 +594,9 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => @start_date |> DateTime.to_unix()})
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" => @start_date |> DateTime.add(1) |> DateTime.to_unix()
+      })
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
