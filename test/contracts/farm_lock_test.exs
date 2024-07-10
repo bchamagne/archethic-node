@@ -1221,15 +1221,13 @@ defmodule VestingTest do
     assert Decimal.eq?(expected_lp_tokens_deposited, farm_infos["lp_tokens_deposited"])
 
     if Decimal.positive?(total_lp_tokens_deposited) do
-      # sum of rewards_allocated is equal to uco_balance
+      # sum of rewards_allocated is equal to initial balance
       assert farm_infos["stats"]
              |> Map.values()
-             |> Enum.reduce(0, &Decimal.add(&1["rewards_allocated"], &2))
+             |> Enum.flat_map(&Map.values(&1["rewards_allocated"]))
+             |> Enum.reduce(&Decimal.add/2)
              |> then(fn total_rewards_allocated ->
-               # we can't compare directly because the rewards_allocated are not precise
-               Decimal.div(reward_allocated_at_year(time_now), total_rewards_allocated)
-               |> Decimal.round()
-               |> Decimal.eq?(1)
+               assert Decimal.eq?(total_rewards_allocated, @initial_balance)
              end)
     end
 
@@ -1564,22 +1562,6 @@ defmodule VestingTest do
       diff when diff > 7 * @seconds_in_day -> "2"
       diff when diff > 0 -> "1"
       _ -> "0"
-    end
-  end
-
-  defp reward_allocated_at_year(now) do
-    cond do
-      DateTime.compare(now, @start_date |> DateTime.add(365 * @seconds_in_day)) in [:lt, :eq] ->
-        @reward_year_1
-
-      DateTime.compare(now, @start_date |> DateTime.add(2 * 365 * @seconds_in_day)) in [:lt, :eq] ->
-        @reward_year_2
-
-      DateTime.compare(now, @start_date |> DateTime.add(3 * 365 * @seconds_in_day)) in [:lt, :eq] ->
-        @reward_year_3
-
-      true ->
-        @reward_year_4
     end
   end
 end
