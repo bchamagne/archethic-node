@@ -1194,7 +1194,7 @@ defmodule VestingTest do
     assert farm_infos["reward_token"] == "UCO"
 
     for {key, value} <- farm_infos["available_levels"] do
-      assert key in ["0", "1", "2", "3", "4", "5", "6", "7"]
+      assert key in available_levels_at(time_now)
       assert value == time_now_unix + level_to_seconds(key)
     end
 
@@ -1543,6 +1543,21 @@ defmodule VestingTest do
   defp level_to_days("7"), do: 1095
 
   defp level_to_seconds(lvl), do: level_to_days(lvl) * @seconds_in_day
+
+  defp available_levels_at(datetime) do
+    ["0", "1", "2", "3", "4", "5", "6", "7"]
+    |> Enum.reduce([], fn level, acc ->
+      if DateTime.compare(
+           datetime,
+           @end_date |> DateTime.add(-1 * level_to_days(level) * @seconds_in_day)
+         ) in [:lt, :eq] do
+        [level | acc]
+      else
+        acc
+      end
+    end)
+    |> Enum.reverse()
+  end
 
   defp end_to_level(end_timestamp, time_now) do
     case end_timestamp |> DateTime.from_unix!() |> DateTime.diff(time_now) do
