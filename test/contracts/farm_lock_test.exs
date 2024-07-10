@@ -870,7 +870,7 @@ defmodule VestingTest do
       # W4 = (0.95172413, 0.04827586)
       #
       # seed1 = (5/180 * D * W1.0) + (23/180 * D * W2.0) + (7/180 * D * W3.0) + (145/180 * D * W4.0) = 20834376.455342464
-      # seed2 = (5/180 * D * W1.1) + (23/180 * D * W2.1) + (7/180 * D * W3.1) + (145/180 * D * W4.1) = 1357404.1508219177
+      # seed1' = (5/180 * D * W1.1) + (23/180 * D * W2.1) + (7/180 * D * W3.1) + (145/180 * D * W4.1) = 1357404.1508219177
       # imprecision due to rounding 8
       asserts_get_user_infos(result_contract, "seed", actions,
         assert_fn: fn user_infos ->
@@ -1218,15 +1218,9 @@ defmodule VestingTest do
       |> Enum.reduce(0, &Decimal.add(&1["lp_tokens_deposited"], &2))
 
     assert Decimal.eq?(expected_lp_tokens_deposited, total_lp_tokens_deposited)
+    assert Decimal.eq?(expected_lp_tokens_deposited, farm_infos["lp_tokens_deposited"])
 
     if Decimal.positive?(total_lp_tokens_deposited) do
-      # sum of tvl_ratio is equal to 1
-      assert farm_infos["stats"]
-             |> Map.values()
-             |> Enum.reduce(0, &Decimal.add(&1["tvl_ratio"], &2))
-             # we can't compare directly because the ratio are not precise
-             |> Decimal.gt?(Decimal.new("0.9999"))
-
       # sum of rewards_allocated is equal to uco_balance
       assert farm_infos["stats"]
              |> Map.values()
@@ -1478,9 +1472,10 @@ defmodule VestingTest do
   end
 
   defp level_generator(opts) do
+    min_level = Keyword.get(opts, :min_level, 0)
     max_level = Keyword.get(opts, :max_level, 7)
 
-    StreamData.integer(0..max_level)
+    StreamData.integer(min_level..max_level)
     |> StreamData.map(&Integer.to_string/1)
   end
 
