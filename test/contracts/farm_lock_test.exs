@@ -1224,7 +1224,9 @@ defmodule VestingTest do
       # sum of rewards_allocated is equal to initial balance
       assert farm_infos["stats"]
              |> Map.values()
-             |> Enum.flat_map(&Map.values(&1["rewards_allocated"]))
+             |> Enum.map(& &1["rewards_allocated"])
+             |> List.flatten()
+             |> Enum.map(& &1["rewards"])
              |> Enum.reduce(&Decimal.add/2)
              |> then(fn total_rewards_allocated ->
                # total_rewards_allocated should be equal to initial balance
