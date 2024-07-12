@@ -1195,7 +1195,9 @@ defmodule VestingTest do
 
     for {key, value} <- farm_infos["available_levels"] do
       assert key in available_levels_at(time_now)
-      assert value == time_now_unix + level_to_seconds(key)
+
+      assert value == time_now_unix + level_to_seconds(key) ||
+               value == DateTime.to_unix(@end_date)
     end
 
     assert farm_infos["stats"] |> Map.keys() == ["0", "1", "2", "3", "4", "5", "6", "7"]
@@ -1543,18 +1545,28 @@ defmodule VestingTest do
   defp level_to_seconds(lvl), do: level_to_days(lvl) * @seconds_in_day
 
   defp available_levels_at(datetime) do
-    ["0", "1", "2", "3", "4", "5", "6", "7"]
-    |> Enum.reduce([], fn level, acc ->
-      if DateTime.compare(
-           datetime,
-           @end_date |> DateTime.add(-1 * level_to_days(level) * @seconds_in_day)
-         ) in [:lt, :eq] do
-        [level | acc]
-      else
-        acc
-      end
-    end)
-    |> Enum.reverse()
+    {availables, _} =
+      ["1", "2", "3", "4", "5", "6", "7"]
+      |> Enum.reduce({[], false}, fn level, {acc, reached_end} ->
+        if DateTime.compare(
+             datetime,
+             @end_date |> DateTime.add(-1 * level_to_days(level) * @seconds_in_day)
+           ) in [:lt, :eq] do
+          {[level | acc], reached_end}
+        else
+          if !reached_end do
+            {[level | acc], true}
+          else
+            {acc, reached_end}
+          end
+        end
+      end)
+
+    if DateTime.compare(datetime, @end_date) == :lt do
+      ["0" | Enum.reverse(availables)]
+    else
+      Enum.reverse(availables)
+    end
   end
 
   defp end_to_level(end_timestamp, time_now) do
