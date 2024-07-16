@@ -1,5 +1,11 @@
 @version 1
 
+#      _                      _ _
+#   __| | ___ _ __   ___  ___(_| |_
+#  / _` |/ _ | '_ \ / _ \/ __| | __|
+# | (_| |  __| |_) | (_) \__ | | |_
+#  \__,_|\___| .__/ \___/|___|_|\__|
+
 condition triggered_by: transaction, on: deposit(end_timestamp) do
   now = Time.now()
 
@@ -47,11 +53,13 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
   user_genesis_address = get_user_genesis()
   id = String.from_number(now)
 
-  # log(
-  #   label: "deposit",
-  #   end_timestamp: (end_timestamp - @START_DATE) / 86400,
-  #   user: user_genesis_address
-  # )
+  log(
+    label: "deposit",
+    end_timestamp: end_timestamp,
+    end_timestamp_human: (end_timestamp - @START_DATE) / 86400,
+    user: user_genesis_address,
+    id: id
+  )
 
   # split the deposit in many sub-deposits
   # 1 for each state change (level or year)
@@ -144,15 +152,99 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
     end
   end
 
-  # TODO: clean old?
   # TODO: merge flexible
   previous_sub_deposits = State.get("sub_deposits", [])
   sub_deposits = previous_sub_deposits ++ sub_deposits
-  sub_deposits = List.sort_by(sub_deposits, "from")
-  State.set("sub_deposits", sub_deposits)
+  State.set("sub_deposits", List.sort_by(sub_deposits, "from"))
   State.set("tokens_deposited", State.get("tokens_deposited", 0) + transfer_amount)
 end
 
+#       _       _
+#   ___| | __ _(_)_ __ ___
+#  / __| |/ _` | | '_ ` _ \
+# | (__| | (_| | | | | | | |
+#  \___|_|\__,_|_|_| |_| |_|
+
+condition triggered_by: transaction, on: claim(deposit_id) do
+  if transaction.timestamp <= @START_DATE do
+    throw(message: "farm is not started yet", code: 2001)
+  end
+
+  now = Time.now()
+  user_genesis_address = get_user_genesis()
+  user_deposit = get_deposit(user_genesis_address, deposit_id)
+
+  if user_deposit == nil do
+    throw(message: "deposit not found", code: 2000)
+  end
+
+  if user_deposit.to != nil do
+    throw(message: "claiming before end of lock", code: 2002)
+  end
+
+  # TODO: CALCULATIONS
+  # TODO: user_deposit.rewards > 0
+  true
+end
+
+actions triggered_by: transaction, on: claim(deposit_id) do
+  log(label: "claim", deposit_id: deposit_id)
+  now = Time.now()
+
+  # TODO: CALCULATIONS
+  # FIXME: should be res.rewards_reserved
+  rewards_reserved = State.get("rewards_reserved", 0)
+  # FIXME: should be res.sub_deposits
+  sub_deposits = State.get("sub_deposits", [])
+
+  user_genesis_address = get_user_genesis()
+  user_deposit = get_deposit(user_genesis_address, deposit_id)
+
+  # transfer the rewards
+  if @REWARD_TOKEN == "UCO" do
+    # TODO user_deposit.rewards)
+    Contract.add_uco_transfer(to: transaction.address, amount: 42)
+  else
+    Contract.add_token_transfer(
+      to: transaction.address,
+      amount: user_deposit.rewards,
+      token_address: @REWARD_TOKEN
+    )
+  end
+
+  # clean rewards from subdeposits
+  updated_sub_deposits = []
+
+  for sub_deposit in sub_deposits do
+    if sub_deposit.id == deposit_id do
+      # no need to preserve the past sub_deposits any more
+      if sub_deposit.to >= now do
+        sub_deposit = Map.set(sub_deposit, "rewards", 0)
+        updated_sub_deposits = List.prepend(updated_sub_deposits, sub_deposit)
+      end
+    else
+      updated_sub_deposits = List.prepend(updated_sub_deposits, sub_deposit)
+    end
+  end
+
+  State.set("sub_deposits", List.sort_by(updated_sub_deposits, "from"))
+  State.set("rewards_distributed", State.get("rewards_distributed", 0) + user_deposit.rewards)
+  State.set("rewards_reserved", rewards_reserved - user_deposit.rewards)
+  State.set("last_calculation_timestamp", now)
+end
+
+#           _ _   _         _
+# __      _(_| |_| |__   __| |_ __ __ ___      __
+# \ \ /\ / | | __| '_ \ / _` | '__/ _` \ \ /\ / /
+#  \ V  V /| | |_| | | | (_| | | | (_| |\ V  V /
+#   \_/\_/ |_|\__|_| |_|\__,_|_|  \__,_| \_/\_/
+
+#             _    __                      _        __
+#   __ _  ___| |_ / _| __ _ _ __ _ __ ___ (_)_ __  / _| ___  ___
+#  / _` |/ _ | __| |_ / _` | '__| '_ ` _ \| | '_ \| |_ / _ \/ __|
+# | (_| |  __| |_|  _| (_| | |  | | | | | | | | | |  _| (_) \__ \
+#  \__, |\___|\__|_|  \__,_|_|  |_| |_| |_|_|_| |_|_|  \___/|___/
+#  |___/
 export fun(get_farm_infos()) do
   now = Time.now()
   day = @SECONDS_IN_DAY
@@ -303,6 +395,13 @@ export fun(get_farm_infos()) do
   ]
 end
 
+#             _                       _        __
+#   __ _  ___| |_ _   _ ___  ___ _ __(_)_ __  / _| ___  ___
+#  / _` |/ _ | __| | | / __|/ _ | '__| | '_ \| |_ / _ \/ __|
+# | (_| |  __| |_| |_| \__ |  __| |  | | | | |  _| (_) \__ \
+#  \__, |\___|\__ \__,_|___/\___|_|  |_|_| |_|_|  \___/|___/
+#  |___/
+
 export fun(get_user_infos(user_genesis_address)) do
   now = Time.now()
   day = @SECONDS_IN_DAY
@@ -339,12 +438,11 @@ export fun(get_user_infos(user_genesis_address)) do
       tokens = sub_deposit.tokens
       rewards = rewards + sub_deposit.rewards
 
-      if sub_deposit.from != nil && (min_from == nil || min_from > sub_deposit.from) do
+      if sub_deposit_level != 0 && (min_from == nil || min_from > sub_deposit.from) do
         min_from = sub_deposit.from
       end
 
-      if sub_deposit.to != nil && sub_deposit_level != 0 &&
-           (max_to == nil || max_to < sub_deposit.to) do
+      if sub_deposit_level != 0 && (max_to == nil || max_to < sub_deposit.to) do
         max_to = sub_deposit.to
       end
 
@@ -354,9 +452,14 @@ export fun(get_user_infos(user_genesis_address)) do
     end
 
     to_human = nil
+    from_human = nil
 
     if max_to != nil do
       to_human = (max_to - @START_DATE) / 86400
+    end
+
+    if min_from != nil do
+      from_human = (min_from - @START_DATE) / 86400
     end
 
     reply =
@@ -366,10 +469,74 @@ export fun(get_user_infos(user_genesis_address)) do
         rewards: rewards,
         level: String.from_number(max_level),
         from: min_from,
-        from_human: (min_from - @START_DATE) / 86400,
+        from_human: from_human,
         to: max_to,
         to_human: to_human
       )
+  end
+
+  reply
+end
+
+fun get_deposit(user_genesis_address, deposit_id) do
+  sub_deposits = State.get("sub_deposits", [])
+  sub_deposits_relevant = []
+
+  max_level = 0
+  min_from = nil
+  max_to = nil
+  tokens = nil
+  rewards = 0
+
+  for sub_deposit in sub_deposits do
+    if sub_deposit.user == user_genesis_address && sub_deposit.id == deposit_id do
+      sub_deposit_level = String.to_number(sub_deposit.level)
+      tokens = sub_deposit.tokens
+      rewards = rewards + sub_deposit.rewards
+
+      # only consider the sub_deposits remaining
+      if sub_deposit.to >= now do
+        if sub_deposit_level != 0 &&
+             (min_from == nil || min_from > sub_deposit.from) do
+          min_from = sub_deposit.from
+        end
+
+        if sub_deposit_level != 0 &&
+             (max_to == nil || max_to < sub_deposit.to) do
+          max_to = sub_deposit.to
+        end
+
+        if max_level < sub_deposit_level do
+          max_level = sub_deposit_level
+        end
+      end
+    end
+  end
+
+  reply = nil
+
+  if tokens != nil do
+    to_human = nil
+    from_human = nil
+
+    if max_to != nil do
+      to_human = (max_to - @START_DATE) / 86400
+    end
+
+    if min_from != nil do
+      from_human = (min_from - @START_DATE) / 86400
+    end
+
+    reply = [
+      id: deposit_id,
+      tokens: tokens,
+      rewards: rewards,
+      level: String.from_number(max_level),
+      from: min_from,
+      from_human: from_human,
+      to: max_to,
+      to_human: to_human
+    ]
   end
 
   reply

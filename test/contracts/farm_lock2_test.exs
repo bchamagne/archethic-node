@@ -1147,31 +1147,33 @@ defmodule FarmLock2Test do
          %{
            amount: Decimal.new(1000),
            delay: 0,
-           level: "0",
+           level: "5",
            seed: "seed"
          }},
         {:deposit,
          %{
            amount: Decimal.new(1000),
            delay: 5,
-           level: "0",
+           level: "5",
            seed: "seed2"
          }},
         {:claim,
          %{
-           delay: 10,
-           deposit_index: 0,
+           delay: 1000,
+           deposit_id: delay_to_id(0),
            seed: "seed"
          }},
         {:claim,
          %{
-           delay: 15,
-           deposit_index: 0,
+           delay: 1001,
+           deposit_id: delay_to_id(5),
            seed: "seed2"
          }}
       ]
 
       result_contract = run_actions(actions, contract, %{}, @initial_balance)
+
+      IO.inspect(result_contract.state)
 
       asserts_get_farm_infos(result_contract, actions,
         assert_fn: fn farm_infos ->
@@ -1180,7 +1182,7 @@ defmodule FarmLock2Test do
           assert Decimal.eq?(
                    Decimal.add(
                      farm_infos["rewards_distributed"],
-                     result_contract.state["rewards_reserved"]
+                     result_contract.state["rewards_reserved"] || 0
                    ),
                    "1849314.36531688"
                  )
@@ -1219,7 +1221,7 @@ defmodule FarmLock2Test do
             actions
             |> Enum.reduce(0, fn {_, %{delay: delay}}, acc -> max(delay, acc) end)
 
-          DateTime.add(@start_date, max_delay * @seconds_in_day, :second)
+          DateTime.add(@start_date, max_delay * @seconds_in_day)
 
         datetime ->
           datetime
@@ -1321,7 +1323,7 @@ defmodule FarmLock2Test do
             actions
             |> Enum.reduce(0, fn {_, %{delay: delay}}, acc -> max(delay, acc) end)
 
-          DateTime.add(@start_date, max_delay * @seconds_in_day, :second)
+          DateTime.add(@start_date, max_delay * @seconds_in_day)
 
         datetime ->
           datetime
@@ -1441,7 +1443,7 @@ defmodule FarmLock2Test do
           :relock ->
             start_timestamp =
               @start_date
-              |> DateTime.add(payload.delay * @seconds_in_day, :second)
+              |> DateTime.add(payload.delay * @seconds_in_day)
               |> DateTime.to_unix()
 
             List.update_at(user_deposits, payload.deposit_index, fn d ->
@@ -1463,7 +1465,7 @@ defmodule FarmLock2Test do
       index = Map.get(index_acc, seed, 1)
       index_acc = Map.put(index_acc, seed, index + 1)
 
-      timestamp = @start_date |> DateTime.add(payload.delay * @seconds_in_day, :second)
+      timestamp = @start_date |> DateTime.add(payload.delay * @seconds_in_day)
 
       trigger =
         case action do
@@ -1478,7 +1480,7 @@ defmodule FarmLock2Test do
           :claim ->
             Trigger.new(payload.seed, index)
             |> Trigger.timestamp(timestamp)
-            |> Trigger.named_action("claim", %{"deposit_index" => payload.deposit_index})
+            |> Trigger.named_action("claim", %{"deposit_id" => payload.deposit_id})
 
           :withdraw ->
             Trigger.new(payload.seed, index)
@@ -1617,5 +1619,11 @@ defmodule FarmLock2Test do
       diff when diff > 0 -> "1"
       _ -> "0"
     end
+  end
+
+  defp delay_to_id(delay) do
+    @start_date
+    |> DateTime.add(delay * @seconds_in_day)
+    |> DateTime.to_unix()
   end
 end
