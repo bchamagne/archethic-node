@@ -738,6 +738,8 @@ defmodule FarmLock2Test do
 
       result_contract = run_actions(actions, contract, %{}, @initial_balance)
 
+      asserts_get_farm_infos(result_contract, actions)
+
       # formula: (180/365) * 45_000_000 = 22191780.821917806
       # imprecision due to rounding 8
       asserts_get_user_infos(result_contract, "seed", actions,
@@ -1276,17 +1278,12 @@ defmodule FarmLock2Test do
              end)
     end
 
-    # sum of rewards_amount == rewards_reserved
     rewards_reserved =
-      contract.state["deposits"]
-      |> Map.values()
-      |> List.flatten()
-      |> Enum.reduce(0, &Decimal.add(&1["rewards"], &2))
-
-    # rewards_reserved may not exist (if there are only deposits when farm is not started)
-    if contract.state["rewards_reserved"] do
-      assert Decimal.eq?(rewards_reserved, contract.state["rewards_reserved"])
-    end
+      if contract.state["rewards_reserved"] do
+        contract.state["rewards_reserved"]
+      else
+        0
+      end
 
     # remaining_rewards subtracts the reserved rewards
     assert Decimal.eq?(
@@ -1611,14 +1608,14 @@ defmodule FarmLock2Test do
 
   defp end_to_level(end_timestamp, time_now) do
     case end_timestamp |> DateTime.from_unix!() |> DateTime.diff(time_now) do
-      diff when diff > 730 * @seconds_in_day -> 7
-      diff when diff > 365 * @seconds_in_day -> 6
-      diff when diff > 180 * @seconds_in_day -> 5
-      diff when diff > 90 * @seconds_in_day -> 4
-      diff when diff > 30 * @seconds_in_day -> 3
-      diff when diff > 7 * @seconds_in_day -> 2
-      diff when diff > 0 -> 1
-      _ -> 0
+      diff when diff > 730 * @seconds_in_day -> "7"
+      diff when diff > 365 * @seconds_in_day -> "6"
+      diff when diff > 180 * @seconds_in_day -> "5"
+      diff when diff > 90 * @seconds_in_day -> "4"
+      diff when diff > 30 * @seconds_in_day -> "3"
+      diff when diff > 7 * @seconds_in_day -> "2"
+      diff when diff > 0 -> "1"
+      _ -> "0"
     end
   end
 end

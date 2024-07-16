@@ -66,7 +66,7 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
         List.append(sub_deposits,
           user: user_genesis_address,
           id: id,
-          level: 0,
+          level: "0",
           year: year_period.year,
           tokens: transfer_amount,
           rewards: 0,
@@ -77,24 +77,24 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
         )
     end
   else
-    levels = all_levels()
     levels_froms = Map.new()
 
-    for level in levels do
+    for level in all_levels() do
       levels_froms = Map.set(levels_froms, level, now + level_to_duration(level))
     end
 
-    max_level = deposit_max_level(end_timestamp, levels_froms)
+    max_level = String.to_number(deposit_max_level(end_timestamp, levels_froms))
 
     # construct the periods from right to left
     cursor = @END_DATE
 
     for year_period in reverse(years_periods) do
       for level in 0..max_level do
+        level = String.from_number(level)
         level_to = cursor
         level_from = nil
 
-        if level == 0 do
+        if level == "0" do
           level_from = end_timestamp
         else
           level_from = end_timestamp - level_to_duration(level)
@@ -150,6 +150,157 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
   sub_deposits = previous_sub_deposits ++ sub_deposits
   sub_deposits = List.sort_by(sub_deposits, "from")
   State.set("sub_deposits", sub_deposits)
+  State.set("tokens_deposited", State.get("tokens_deposited", 0) + transfer_amount)
+end
+
+export fun(get_farm_infos()) do
+  now = Time.now()
+  day = @SECONDS_IN_DAY
+  year = 365 * day
+
+  rewards_reserved = State.get("rewards_reserved", 0)
+  rewards_distributed = State.get("rewards_distributed", 0)
+  tokens_deposited = State.get("tokens_deposited", 0)
+  sub_deposits = State.get("sub_deposits", [])
+
+  weight_per_level = Map.new()
+  weight_per_level = Map.set(weight_per_level, "0", 0.007)
+  weight_per_level = Map.set(weight_per_level, "1", 0.013)
+  weight_per_level = Map.set(weight_per_level, "2", 0.024)
+  weight_per_level = Map.set(weight_per_level, "3", 0.043)
+  weight_per_level = Map.set(weight_per_level, "4", 0.077)
+  weight_per_level = Map.set(weight_per_level, "5", 0.138)
+  weight_per_level = Map.set(weight_per_level, "6", 0.249)
+  weight_per_level = Map.set(weight_per_level, "7", 0.449)
+
+  levels_froms = Map.new()
+  levels_froms = Map.set(levels_froms, "0", now + 0)
+  levels_froms = Map.set(levels_froms, "1", now + 7 * day)
+  levels_froms = Map.set(levels_froms, "2", now + 30 * day)
+  levels_froms = Map.set(levels_froms, "3", now + 90 * day)
+  levels_froms = Map.set(levels_froms, "4", now + 180 * day)
+  levels_froms = Map.set(levels_froms, "5", now + 365 * day)
+  levels_froms = Map.set(levels_froms, "6", now + 730 * day)
+  levels_froms = Map.set(levels_froms, "7", now + 1095 * day)
+
+  years = [
+    [year: 1, from: @START_DATE, to: @START_DATE + year - 1, rewards: @REWARDS_YEAR_1],
+    [
+      year: 2,
+      from: @START_DATE + year,
+      to: @START_DATE + 2 * year - 1,
+      rewards: @REWARDS_YEAR_2
+    ],
+    [
+      year: 3,
+      from: @START_DATE + 2 * year,
+      to: @START_DATE + 3 * year - 1,
+      rewards: @REWARDS_YEAR_3
+    ],
+    [year: 4, from: @START_DATE + 3 * year, to: @END_DATE, rewards: @REWARDS_YEAR_4]
+  ]
+
+  # retrieve remaining balance
+  rewards_balance = nil
+
+  if @REWARD_TOKEN == "UCO" do
+    rewards_balance = contract.balance.uco
+  else
+    key = [token_address: @REWARD_TOKEN, token_id: 0]
+    rewards_balance = Map.get(contract.balance.tokens, key, 0)
+  end
+
+  # calc remaining rewards
+  rewards_remaining = nil
+
+  if rewards_balance != nil do
+    rewards_remaining = rewards_balance - rewards_reserved
+  end
+
+  # determine available levels
+  available_levels = Map.new()
+  end_reached = false
+
+  for level in Map.keys(levels_froms) do
+    level_from = Map.get(levels_froms, level)
+
+    if level_from < @END_DATE do
+      available_levels = Map.set(available_levels, level, level_from)
+    else
+      if !end_reached && Map.size(available_levels) > 0 do
+        available_levels = Map.set(available_levels, level, @END_DATE)
+        end_reached = true
+      end
+    end
+  end
+
+  # calc stats
+  tokens_deposited_weighted_total = 0
+  tokens_deposited_per_level = Map.new()
+  deposits_count_per_level = Map.new()
+
+  for sub_deposit in sub_deposits do
+    # we only consider the sub_deposits that contains "now" (1 per deposit)
+    if now >= sub_deposit.from && now < sub_deposit.end do
+      weighted_tokens = sub_deposit.tokens * Map.get(weight_per_level, sub_deposit.level)
+      tokens_deposited_weighted_total = tokens_deposited_weighted_total + weighted_tokens
+
+      tokens_deposited_per_level =
+        Map.set(
+          tokens_deposited_per_level,
+          level,
+          Map.get(tokens_deposited_per_level, level, 0) + sub_deposit.tokens
+        )
+
+      deposits_count_per_level =
+        Map.set(
+          deposits_count_per_level,
+          level,
+          Map.get(deposits_count_per_level, level, 0) + 1
+        )
+    end
+  end
+
+  stats = Map.new()
+
+  for level in ["0", "1", "2", "3", "4", "5", "6", "7"] do
+    rewards_allocated = []
+
+    for y in years do
+      rewards = nil
+
+      if tokens_deposited_weighted_total > 0 do
+        rewards =
+          Map.get(tokens_deposited_per_level, level, 0) * Map.get(weight_per_level, level) /
+            tokens_deposited_weighted_total * y.rewards
+      else
+        rewards = Map.get(weight_per_level, level) * y.rewards
+      end
+
+      rewards_allocated =
+        List.append(rewards_allocated, start: y.from, end: y.to, rewards: rewards)
+    end
+
+    stats =
+      Map.set(stats, level,
+        rewards_allocated: rewards_allocated,
+        deposits_count: Map.get(deposits_count_per_level, level, 0),
+        lp_tokens_deposited: Map.get(tokens_deposited_per_level, level, 0),
+        weight: Map.get(weight_per_level, level)
+      )
+  end
+
+  [
+    lp_token_address: @LP_TOKEN_ADDRESS,
+    reward_token: @REWARD_TOKEN,
+    start_date: @START_DATE,
+    end_date: @END_DATE,
+    lp_tokens_deposited: tokens_deposited,
+    remaining_rewards: rewards_remaining,
+    rewards_distributed: rewards_distributed,
+    available_levels: available_levels,
+    stats: stats
+  ]
 end
 
 export fun(get_user_infos(user_genesis_address)) do
@@ -184,6 +335,7 @@ export fun(get_user_infos(user_genesis_address)) do
     rewards = 0
 
     for sub_deposit in sub_deposits_for_id do
+      sub_deposit_level = String.to_number(sub_deposit.level)
       tokens = sub_deposit.tokens
       rewards = rewards + sub_deposit.rewards
 
@@ -191,13 +343,13 @@ export fun(get_user_infos(user_genesis_address)) do
         min_from = sub_deposit.from
       end
 
-      if sub_deposit.to != nil && sub_deposit.level != 0 &&
+      if sub_deposit.to != nil && sub_deposit_level != 0 &&
            (max_to == nil || max_to < sub_deposit.to) do
         max_to = sub_deposit.to
       end
 
-      if sub_deposit.to >= now && max_level < sub_deposit.level do
-        max_level = sub_deposit.level
+      if sub_deposit.to >= now && max_level < sub_deposit_level do
+        max_level = sub_deposit_level
       end
     end
 
@@ -212,7 +364,7 @@ export fun(get_user_infos(user_genesis_address)) do
         id: id,
         tokens: tokens,
         rewards: rewards,
-        level: max_level,
+        level: String.from_number(max_level),
         from: min_from,
         from_human: (min_from - @START_DATE) / 86400,
         to: max_to,
@@ -286,14 +438,14 @@ fun deposit_max_level(end_timestamp, levels_froms) do
   end
 
   if deposit_level == nil do
-    deposit_level = 7
+    deposit_level = "7"
   end
 
   deposit_level
 end
 
 fun all_levels() do
-  0..7
+  ["0", "1", "2", "3", "4", "5", "6", "7"]
 end
 
 fun level_to_duration(level) do
@@ -301,35 +453,35 @@ fun level_to_duration(level) do
 
   duration = nil
 
-  if level == 0 do
+  if level == "0" do
     duration = 0
   end
 
-  if level == 1 do
+  if level == "1" do
     duration = 7 * day
   end
 
-  if level == 2 do
+  if level == "2" do
     duration = 30 * day
   end
 
-  if level == 3 do
+  if level == "3" do
     duration = 90 * day
   end
 
-  if level == 4 do
+  if level == "4" do
     duration = 180 * day
   end
 
-  if level == 5 do
+  if level == "5" do
     duration = 365 * day
   end
 
-  if level == 6 do
+  if level == "6" do
     duration = 730 * day
   end
 
-  if level == 7 do
+  if level == "7" do
     duration = 1095 * day
   end
 
