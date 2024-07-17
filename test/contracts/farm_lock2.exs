@@ -239,6 +239,84 @@ end
 #  \ V  V /| | |_| | | | (_| | | | (_| |\ V  V /
 #   \_/\_/ |_|\__|_| |_|\__,_|_|  \__,_| \_/\_/
 
+condition triggered_by: transaction, on: withdraw(amount, deposit_id) do
+  user_genesis_address = get_user_genesis()
+  user_deposit = get_deposit(user_genesis_address, deposit_id)
+
+  log(user_deposit)
+
+  if user_deposit == nil do
+    throw(message: "deposit not found", code: 3000)
+  end
+
+  if amount > user_deposit.tokens do
+    throw(message: "amount requested is greater than amount deposited", code: 3003)
+  end
+
+  if user_deposit.to != nil do
+    throw(message: "withdrawing before end of lock", code: 3004)
+  end
+
+  true
+end
+
+actions triggered_by: transaction, on: withdraw(amount, deposit_index) do
+  # TODO: CALCULATIONS
+  # FIXME: should be res.rewards_reserved
+  rewards_reserved = State.get("rewards_reserved", 0)
+  # FIXME: should be res.sub_deposits
+  sub_deposits = State.get("sub_deposits", [])
+
+  user_genesis_address = get_user_genesis()
+  user_deposit = get_deposit(user_genesis_address, deposit_id)
+
+  # transfer the rewards
+  if user_deposit.rewards > 0 do
+    if @REWARD_TOKEN == "UCO" do
+      Contract.add_uco_transfer(to: transaction.address, amount: user_deposit.rewards)
+    else
+      Contract.add_token_transfer(
+        to: transaction.address,
+        amount: user_deposit.rewards,
+        token_address: @REWARD_TOKEN
+      )
+    end
+
+    rewards_reserved = rewards_reserved - user_deposit.rewards
+  end
+
+  # transfer the lp tokens
+  Contract.add_token_transfer(
+    to: transaction.address,
+    amount: amount,
+    token_address: @LP_TOKEN_ADDRESS
+  )
+
+  # reset rewards & update amount
+  updated_sub_deposits = []
+
+  for sub_deposit in sub_deposits do
+    if sub_deposit.id == deposit_id do
+      remaining_tokens = sub_deposit.tokens - amount
+
+      # no need to preserve the past sub_deposits any more
+      # no need to preserve the deposit if everything is withdrawn
+      if sub_deposit.to >= now && remaining_tokens > 0 do
+        sub_deposit = Map.set(sub_deposit, "rewards", 0)
+        sub_deposit = Map.set(sub_deposit, "tokens", remaining_tokens)
+        updated_sub_deposits = List.prepend(updated_sub_deposits, sub_deposit)
+      end
+    else
+      updated_sub_deposits = List.prepend(updated_sub_deposits, sub_deposit)
+    end
+  end
+
+  State.set("sub_deposits", List.sort_by(updated_sub_deposits, "from"))
+  State.set("rewards_distributed", State.get("rewards_distributed", 0) + user_deposit.rewards)
+  State.set("rewards_reserved", rewards_reserved)
+  State.set("tokens_deposited", State.get("tokens_deposited") - amount)
+end
+
 #             _    __                      _        __
 #   __ _  ___| |_ / _| __ _ _ __ _ __ ___ (_)_ __  / _| ___  ___
 #  / _` |/ _ | __| |_ / _` | '__| '_ ` _ \| | '_ \| |_ / _ \/ __|

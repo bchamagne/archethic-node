@@ -474,7 +474,7 @@ defmodule FarmLock2Test do
            delay: 2000,
            seed: deposit.seed,
            amount: withdraw_amount,
-           deposit_index: deposit.deposit_index
+           deposit_id: delay_to_id(deposit.delay)
          }}
 
       actions = deposits ++ [withdraw]
@@ -935,7 +935,7 @@ defmodule FarmLock2Test do
          %{
            amount: Decimal.new(1000),
            delay: 5,
-           deposit_index: 0,
+           deposit_id: delay_to_id(0),
            seed: "seed"
          }},
         {:deposit,
@@ -1050,7 +1050,7 @@ defmodule FarmLock2Test do
          %{
            amount: Decimal.new(1000),
            delay: 2000,
-           deposit_index: 0,
+           deposit_id: delay_to_id(0),
            seed: "seed"
          }}
       ]
@@ -1116,14 +1116,14 @@ defmodule FarmLock2Test do
          %{
            amount: Decimal.new(1000),
            delay: 10,
-           deposit_index: 0,
+           deposit_id: delay_to_id(0),
            seed: "seed"
          }},
         {:withdraw,
          %{
            amount: Decimal.new(1000),
            delay: 15,
-           deposit_index: 0,
+           deposit_id: delay_to_id(5),
            seed: "seed2"
          }}
       ]
@@ -1436,8 +1436,12 @@ defmodule FarmLock2Test do
             user_deposits
 
           :withdraw ->
-            List.update_at(user_deposits, payload.deposit_index, fn d ->
-              Map.update!(d, :amount, &Decimal.sub(&1, payload.amount))
+            Enum.map(user_deposits, fn d ->
+              if d.id == payload.deposit_id do
+                Map.update!(d, :amount, &Decimal.sub(&1, payload.amount))
+              else
+                d
+              end
             end)
 
           :relock ->
@@ -1487,7 +1491,7 @@ defmodule FarmLock2Test do
             |> Trigger.timestamp(timestamp)
             |> Trigger.named_action("withdraw", %{
               "amount" => payload.amount,
-              "deposit_index" => payload.deposit_index
+              "deposit_id" => payload.deposit_id
             })
 
           :relock ->
@@ -1566,8 +1570,13 @@ defmodule FarmLock2Test do
     StreamData.constant(
       deposits
       |> Enum.map(fn {:deposit, d} ->
-        # index will always be 0 because it's sorted by delay
-        {:withdraw, %{delay: 2000 + d.delay, seed: d.seed, amount: d.amount, deposit_index: 0}}
+        {:withdraw,
+         %{
+           delay: 2000 + d.delay,
+           seed: d.seed,
+           amount: d.amount,
+           deposit_id: delay_to_id(d.delay)
+         }}
       end)
     )
   end
