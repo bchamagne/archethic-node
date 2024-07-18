@@ -1,0 +1,1 @@
+../../../archethic-dex/contracts/contracts/farm_lock.exs

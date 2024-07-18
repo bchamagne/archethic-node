@@ -771,8 +771,6 @@ defmodule FarmLock2Test do
 
       result_contract = run_actions(actions, contract, %{}, @initial_balance)
 
-      IO.inspect(result_contract.state)
-
       asserts_get_farm_infos(result_contract, actions)
 
       # formula: (180/365) * 45_000_000 = 22191780.821917806
@@ -780,7 +778,7 @@ defmodule FarmLock2Test do
       asserts_get_user_infos(result_contract, "seed", actions,
         assert_fn: fn user_infos ->
           assert 1 == length(user_infos)
-          assert Decimal.eq?(hd(user_infos)["rewards"], "22191780.6")
+          assert Decimal.eq?(hd(user_infos)["rewards"], "22191780.32276441")
         end
       )
     end
@@ -858,14 +856,14 @@ defmodule FarmLock2Test do
       asserts_get_user_infos(result_contract, "seed", actions,
         assert_fn: fn user_infos ->
           assert 1 == length(user_infos)
-          assert Decimal.eq?(hd(user_infos)["rewards"], "20834375.60709506")
+          assert Decimal.eq?(hd(user_infos)["rewards"], "20834375.85215356")
         end
       )
 
       asserts_get_user_infos(result_contract, "seed2", actions,
         assert_fn: fn user_infos ->
           assert 1 == length(user_infos)
-          assert Decimal.eq?(hd(user_infos)["rewards"], "1357404.05891518")
+          assert Decimal.eq?(hd(user_infos)["rewards"], "1357404.07397377")
         end
       )
     end
@@ -912,8 +910,8 @@ defmodule FarmLock2Test do
       asserts_get_user_infos(result_contract, "seed", actions,
         assert_fn: fn user_infos ->
           assert 2 == length(user_infos)
-          assert Decimal.eq?(Enum.at(user_infos, 0)["rewards"], "20834375.60709506")
-          assert Decimal.eq?(Enum.at(user_infos, 1)["rewards"], "1357404.05891518")
+          assert Decimal.eq?(Enum.at(user_infos, 0)["rewards"], "20834375.85215356")
+          assert Decimal.eq?(Enum.at(user_infos, 1)["rewards"], "1357404.07397377")
         end
       )
     end
@@ -1391,6 +1389,7 @@ defmodule FarmLock2Test do
 
       user_info = Enum.find(user_infos, &(&1["id"] == id))
       refute is_nil(user_info)
+
       assert Decimal.eq?(amount, user_info["tokens"])
       assert Decimal.compare(user_info["rewards"], 0) in [:eq, :gt]
       assert end_to_level(end_timestamp, time_now) == user_info["level"]
@@ -1453,7 +1452,6 @@ defmodule FarmLock2Test do
             end_timestamp =
               start_timestamp
               |> DateTime.add(level_to_seconds(payload.level))
-              |> DateTime.add(-1)
 
             deposit = %{
               seed: payload.seed,
