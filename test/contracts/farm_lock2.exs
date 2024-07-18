@@ -53,6 +53,16 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
   user_genesis_address = get_user_genesis()
   id = String.from_number(now)
 
+  weight_by_level = Map.new()
+  weight_by_level = Map.set(weight_by_level, "0", 0.007)
+  weight_by_level = Map.set(weight_by_level, "1", 0.013)
+  weight_by_level = Map.set(weight_by_level, "2", 0.024)
+  weight_by_level = Map.set(weight_by_level, "3", 0.043)
+  weight_by_level = Map.set(weight_by_level, "4", 0.077)
+  weight_by_level = Map.set(weight_by_level, "5", 0.138)
+  weight_by_level = Map.set(weight_by_level, "6", 0.249)
+  weight_by_level = Map.set(weight_by_level, "7", 0.449)
+
   # split the deposit in many sub-deposits
   # 1 for each state change (level or year)
   sub_deposits = []
@@ -69,6 +79,7 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
           level: "0",
           year: year_period.year,
           tokens: transfer_amount,
+          weighted_tokens: transfer_amount * weight_by_level["0"],
           rewards: 0,
           from: year_period.from,
           from_human: (year_period.from - @START_DATE) / 86400,
@@ -125,6 +136,7 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
               level: level,
               year: year_period.year,
               tokens: transfer_amount,
+              weighted_tokens: transfer_amount * weight_by_level[level],
               rewards: 0,
               from: bounded_from,
               from_human: (bounded_from - @START_DATE) / 86400,
@@ -397,20 +409,28 @@ export fun(get_farm_infos()) do
 
   # calc stats
   tokens_deposited_weighted_total = 0
+  tokens_deposited_weighted_by_level = Map.new()
   tokens_deposited_by_level = Map.new()
   deposits_count_by_level = Map.new()
 
   for sub_deposit in sub_deposits do
     # we only consider the sub_deposits that contains "now" (1 per deposit)
     if now >= sub_deposit.from && now < sub_deposit.to do
-      weighted_tokens = sub_deposit.tokens * weight_by_level[sub_deposit.level]
-      tokens_deposited_weighted_total = tokens_deposited_weighted_total + weighted_tokens
+      tokens_deposited_weighted_total =
+        tokens_deposited_weighted_total + sub_deposit.weighted_tokens
 
       tokens_deposited_by_level =
         Map.set(
           tokens_deposited_by_level,
           level,
           Map.get(tokens_deposited_by_level, level, 0) + sub_deposit.tokens
+        )
+
+      tokens_deposited_weighted_by_level =
+        Map.set(
+          tokens_deposited_weighted_by_level,
+          level,
+          Map.get(tokens_deposited_weighted_by_level, level, 0) + sub_deposit.weighted_tokens
         )
 
       deposits_count_by_level =
@@ -428,14 +448,12 @@ export fun(get_farm_infos()) do
     rewards_allocated = []
 
     for y in years do
-      rewards = nil
+      rewards = 0
 
       if tokens_deposited_weighted_total > 0 do
         rewards =
-          Map.get(tokens_deposited_by_level, level, 0) * weight_by_level[level] /
+          Map.get(tokens_deposited_weighted_by_level, level, 0) /
             tokens_deposited_weighted_total * y.rewards
-      else
-        rewards = weight_by_level[level] * y.rewards
       end
 
       rewards_allocated =
@@ -763,16 +781,6 @@ fun calculate_new_rewards(state_changes) do
   now = Time.now()
   day = @SECONDS_IN_DAY
 
-  weight_by_level = Map.new()
-  weight_by_level = Map.set(weight_by_level, "0", 0.007)
-  weight_by_level = Map.set(weight_by_level, "1", 0.013)
-  weight_by_level = Map.set(weight_by_level, "2", 0.024)
-  weight_by_level = Map.set(weight_by_level, "3", 0.043)
-  weight_by_level = Map.set(weight_by_level, "4", 0.077)
-  weight_by_level = Map.set(weight_by_level, "5", 0.138)
-  weight_by_level = Map.set(weight_by_level, "6", 0.249)
-  weight_by_level = Map.set(weight_by_level, "7", 0.449)
-
   rewards_allocated_at_each_year_end = Map.new()
 
   rewards_allocated_at_each_year_end =
@@ -851,13 +859,12 @@ fun calculate_new_rewards(state_changes) do
       for sub_deposit in sub_deposits do
         if sub_deposit.to == timestamp do
           # remove this sub_deposit from state
-          weighted_tokens = weight_by_level[sub_deposit.level] * sub_deposit.tokens
 
           cursor =
             Map.set(
               cursor,
               "weighted_tokens_total",
-              cursor["weighted_tokens_total"] - weighted_tokens
+              cursor["weighted_tokens_total"] - sub_deposit.weighted_tokens
             )
 
           cursor =
@@ -868,20 +875,19 @@ fun calculate_new_rewards(state_changes) do
                 cursor["weighted_tokens_by_level"],
                 sub_deposit.level,
                 Map.get(cursor["weighted_tokens_by_level"], sub_deposit.level, 0) -
-                  weighted_tokens
+                  sub_deposit.weighted_tokens
               )
             )
         end
 
         if sub_deposit.from == timestamp do
           # add this sub_deposit to state
-          weighted_tokens = weight_by_level[sub_deposit.level] * sub_deposit.tokens
 
           cursor =
             Map.set(
               cursor,
               "weighted_tokens_total",
-              cursor["weighted_tokens_total"] + weighted_tokens
+              cursor["weighted_tokens_total"] + sub_deposit.weighted_tokens
             )
 
           cursor =
@@ -892,7 +898,7 @@ fun calculate_new_rewards(state_changes) do
                 cursor["weighted_tokens_by_level"],
                 sub_deposit.level,
                 Map.get(cursor["weighted_tokens_by_level"], sub_deposit.level, 0) +
-                  weighted_tokens
+                  sub_deposit.weighted_tokens
               )
             )
         end
@@ -940,11 +946,9 @@ fun calculate_new_rewards(state_changes) do
 
         for sub_deposit in updated_sub_deposits do
           if sub_deposit.from <= previous_timestamp && sub_deposit.to > previous_timestamp do
-            weighted_tokens = weight_by_level[sub_deposit.level] * sub_deposit.tokens
-
             rewards =
               rewards_to_allocate_by_level[sub_deposit.level] *
-                (weighted_tokens / cursor.weighted_tokens_by_level[sub_deposit.level])
+                (sub_deposit.weighted_tokens / cursor.weighted_tokens_by_level[sub_deposit.level])
 
             rewards_reserved = rewards_reserved + rewards
             sub_deposit = Map.set(sub_deposit, "rewards", sub_deposit["rewards"] + rewards)
