@@ -86,6 +86,7 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
     max_level = String.to_number(deposit_max_level(end_timestamp, levels_froms))
 
     # construct the periods from right to left
+    # wich means from > to
     previous_from = @END_DATE
 
     for year_period in reverse(years_periods) do
@@ -235,8 +236,6 @@ condition triggered_by: transaction, on: withdraw(amount, deposit_id) do
   user_genesis_address = get_user_genesis()
   user_deposit = get_deposit(user_genesis_address, deposit_id)
 
-  log(user_deposit)
-
   if user_deposit == nil do
     throw(message: "deposit not found", code: 3000)
   end
@@ -346,17 +345,17 @@ export fun(get_farm_infos()) do
   levels_froms = Map.set(levels_froms, "7", now + 1095 * day)
 
   years = [
-    [year: 1, from: @START_DATE, to: @START_DATE + year - 1, rewards: @REWARDS_YEAR_1],
+    [year: 1, from: @START_DATE, to: @START_DATE + year, rewards: @REWARDS_YEAR_1],
     [
       year: 2,
       from: @START_DATE + year,
-      to: @START_DATE + 2 * year - 1,
+      to: @START_DATE + 2 * year,
       rewards: @REWARDS_YEAR_2
     ],
     [
       year: 3,
       from: @START_DATE + 2 * year,
-      to: @START_DATE + 3 * year - 1,
+      to: @START_DATE + 3 * year,
       rewards: @REWARDS_YEAR_3
     ],
     [year: 4, from: @START_DATE + 3 * year, to: @END_DATE, rewards: @REWARDS_YEAR_4]
@@ -617,10 +616,10 @@ fun get_years_periods(from, to) do
   year = 365 * day
 
   years = [
-    [year: 1, from: @START_DATE, to: @START_DATE + 1 * year - 1],
-    [year: 2, from: @START_DATE + 1 * year, to: @START_DATE + 2 * year - 1],
-    [year: 3, from: @START_DATE + 2 * year, to: @START_DATE + 3 * year - 1],
-    [year: 4, from: @START_DATE + 3 * year, to: @START_DATE + 4 * year - 1]
+    [year: 1, from: @START_DATE, to: @START_DATE + 1 * year],
+    [year: 2, from: @START_DATE + 1 * year, to: @START_DATE + 2 * year],
+    [year: 3, from: @START_DATE + 2 * year, to: @START_DATE + 3 * year],
+    [year: 4, from: @START_DATE + 3 * year, to: @START_DATE + 4 * year]
   ]
 
   periods = []
@@ -799,7 +798,7 @@ fun calculate_new_rewards(state_changes) do
   end_by_year = Map.new()
 
   for year in ["1", "2", "3", "4"] do
-    end_by_year = Map.set(end_by_year, year, @START_DATE + String.to_number(year) * 365 * day - 1)
+    end_by_year = Map.set(end_by_year, year, @START_DATE + String.to_number(year) * 365 * day)
   end
 
   sub_deposits = State.get("sub_deposits", [])
@@ -812,7 +811,7 @@ fun calculate_new_rewards(state_changes) do
   initial_cursor = [
     timestamp: State.get("cursor_timestamp", @START_DATE),
     year: State.get("cursor_year", "1"),
-    remaining_until_end_of_year: State.get("cursor_remaining_until_end_of_year", 365 * day - 1),
+    remaining_until_end_of_year: State.get("cursor_remaining_until_end_of_year", 365 * day),
     weighted_tokens_total: State.get("weighted_tokens_total", 0),
     weighted_tokens_by_level: State.get("weighted_tokens_by_level", Map.new())
   ]

@@ -18,7 +18,7 @@ defmodule FarmLock2Test do
   @initial_balance @reward_year_1 + @reward_year_2 + @reward_year_3 + @reward_year_4
   @seconds_in_day 86400
   @start_date ~U[2024-07-17T00:00:00Z]
-  @end_date @start_date |> DateTime.add(4 * 365 * @seconds_in_day) |> DateTime.add(-1)
+  @end_date @start_date |> DateTime.add(4 * 365 * @seconds_in_day)
 
   setup do
     constants = [
