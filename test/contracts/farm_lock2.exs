@@ -53,14 +53,6 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
   user_genesis_address = get_user_genesis()
   id = String.from_number(now)
 
-  log(
-    label: "deposit",
-    end_timestamp: end_timestamp,
-    end_timestamp_human: (end_timestamp - @START_DATE) / 86400,
-    user: user_genesis_address,
-    id: id
-  )
-
   # split the deposit in many sub-deposits
   # 1 for each state change (level or year)
   sub_deposits = []
@@ -94,12 +86,12 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
     max_level = String.to_number(deposit_max_level(end_timestamp, levels_froms))
 
     # construct the periods from right to left
-    cursor = @END_DATE
+    previous_from = @END_DATE
 
     for year_period in reverse(years_periods) do
       for level in 0..max_level do
         level = String.from_number(level)
-        level_to = cursor
+        level_to = previous_from
         level_from = nil
 
         if level == "0" do
@@ -107,13 +99,6 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
         else
           level_from = end_timestamp - level_to_duration(level)
         end
-
-        # log(
-        #   year_period: year_period,
-        #   level: level,
-        #   level_from: (level_from - @START_DATE) / 86400,
-        #   level_to: (level_to - @START_DATE) / 86400
-        # )
 
         if level_from < year_period.to && level_to > year_period.from do
           bounded_from = year_period.from
@@ -146,16 +131,24 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
               to_human: (bounded_to - @START_DATE) / 86400
             )
 
-          cursor = bounded_from
+          previous_from = bounded_from
         end
       end
     end
   end
 
+  res = calculate_new_rewards(get_state_changes_for_calculation_period())
+
   # TODO: merge flexible
-  previous_sub_deposits = State.get("sub_deposits", [])
-  sub_deposits = previous_sub_deposits ++ sub_deposits
+
+  sub_deposits = res.sub_deposits ++ sub_deposits
   State.set("sub_deposits", List.sort_by(sub_deposits, "from"))
+  State.set("cursor_timestamp", res.cursor_timestamp)
+  State.set("cursor_year", res.cursor_year)
+  State.set("cursor_remaining_until_end_of_year", res.cursor_remaining_until_end_of_year)
+  State.set("cursor_weighted_tokens_total", res.cursor_weighted_tokens_total)
+  State.set("cursor_weighted_tokens_by_level", res.cursor_weighted_tokens_by_level)
+  State.set("rewards_reserved", res.rewards_reserved)
   State.set("tokens_deposited", State.get("tokens_deposited", 0) + transfer_amount)
 end
 
@@ -188,7 +181,6 @@ condition triggered_by: transaction, on: claim(deposit_id) do
 end
 
 actions triggered_by: transaction, on: claim(deposit_id) do
-  log(label: "claim", deposit_id: deposit_id)
   now = Time.now()
 
   # TODO: CALCULATIONS
@@ -230,7 +222,7 @@ actions triggered_by: transaction, on: claim(deposit_id) do
   State.set("sub_deposits", List.sort_by(updated_sub_deposits, "from"))
   State.set("rewards_distributed", State.get("rewards_distributed", 0) + user_deposit.rewards)
   State.set("rewards_reserved", rewards_reserved - user_deposit.rewards)
-  State.set("last_calculation_timestamp", now)
+  State.set("cursor", now)
 end
 
 #           _ _   _         _
@@ -333,15 +325,15 @@ export fun(get_farm_infos()) do
   tokens_deposited = State.get("tokens_deposited", 0)
   sub_deposits = State.get("sub_deposits", [])
 
-  weight_per_level = Map.new()
-  weight_per_level = Map.set(weight_per_level, "0", 0.007)
-  weight_per_level = Map.set(weight_per_level, "1", 0.013)
-  weight_per_level = Map.set(weight_per_level, "2", 0.024)
-  weight_per_level = Map.set(weight_per_level, "3", 0.043)
-  weight_per_level = Map.set(weight_per_level, "4", 0.077)
-  weight_per_level = Map.set(weight_per_level, "5", 0.138)
-  weight_per_level = Map.set(weight_per_level, "6", 0.249)
-  weight_per_level = Map.set(weight_per_level, "7", 0.449)
+  weight_by_level = Map.new()
+  weight_by_level = Map.set(weight_by_level, "0", 0.007)
+  weight_by_level = Map.set(weight_by_level, "1", 0.013)
+  weight_by_level = Map.set(weight_by_level, "2", 0.024)
+  weight_by_level = Map.set(weight_by_level, "3", 0.043)
+  weight_by_level = Map.set(weight_by_level, "4", 0.077)
+  weight_by_level = Map.set(weight_by_level, "5", 0.138)
+  weight_by_level = Map.set(weight_by_level, "6", 0.249)
+  weight_by_level = Map.set(weight_by_level, "7", 0.449)
 
   levels_froms = Map.new()
   levels_froms = Map.set(levels_froms, "0", now + 0)
@@ -392,7 +384,7 @@ export fun(get_farm_infos()) do
   end_reached = false
 
   for level in Map.keys(levels_froms) do
-    level_from = Map.get(levels_froms, level)
+    level_from = levels_froms[level]
 
     if level_from < @END_DATE do
       available_levels = Map.set(available_levels, level, level_from)
@@ -406,27 +398,27 @@ export fun(get_farm_infos()) do
 
   # calc stats
   tokens_deposited_weighted_total = 0
-  tokens_deposited_per_level = Map.new()
-  deposits_count_per_level = Map.new()
+  tokens_deposited_by_level = Map.new()
+  deposits_count_by_level = Map.new()
 
   for sub_deposit in sub_deposits do
     # we only consider the sub_deposits that contains "now" (1 per deposit)
-    if now >= sub_deposit.from && now < sub_deposit.end do
-      weighted_tokens = sub_deposit.tokens * Map.get(weight_per_level, sub_deposit.level)
+    if now >= sub_deposit.from && now < sub_deposit.to do
+      weighted_tokens = sub_deposit.tokens * weight_by_level[sub_deposit.level]
       tokens_deposited_weighted_total = tokens_deposited_weighted_total + weighted_tokens
 
-      tokens_deposited_per_level =
+      tokens_deposited_by_level =
         Map.set(
-          tokens_deposited_per_level,
+          tokens_deposited_by_level,
           level,
-          Map.get(tokens_deposited_per_level, level, 0) + sub_deposit.tokens
+          Map.get(tokens_deposited_by_level, level, 0) + sub_deposit.tokens
         )
 
-      deposits_count_per_level =
+      deposits_count_by_level =
         Map.set(
-          deposits_count_per_level,
+          deposits_count_by_level,
           level,
-          Map.get(deposits_count_per_level, level, 0) + 1
+          Map.get(deposits_count_by_level, level, 0) + 1
         )
     end
   end
@@ -441,10 +433,10 @@ export fun(get_farm_infos()) do
 
       if tokens_deposited_weighted_total > 0 do
         rewards =
-          Map.get(tokens_deposited_per_level, level, 0) * Map.get(weight_per_level, level) /
+          Map.get(tokens_deposited_by_level, level, 0) * weight_by_level[level] /
             tokens_deposited_weighted_total * y.rewards
       else
-        rewards = Map.get(weight_per_level, level) * y.rewards
+        rewards = weight_by_level[level] * y.rewards
       end
 
       rewards_allocated =
@@ -454,9 +446,9 @@ export fun(get_farm_infos()) do
     stats =
       Map.set(stats, level,
         rewards_allocated: rewards_allocated,
-        deposits_count: Map.get(deposits_count_per_level, level, 0),
-        lp_tokens_deposited: Map.get(tokens_deposited_per_level, level, 0),
-        weight: Map.get(weight_per_level, level)
+        deposits_count: Map.get(deposits_count_by_level, level, 0),
+        lp_tokens_deposited: Map.get(tokens_deposited_by_level, level, 0),
+        weight: weight_by_level[level]
       )
   end
 
@@ -504,7 +496,7 @@ export fun(get_user_infos(user_genesis_address)) do
 
   # sub_deposits to deposits
   for id in Map.keys(user_sub_deposits_by_id) do
-    sub_deposits_for_id = Map.get(user_sub_deposits_by_id, id)
+    sub_deposits_for_id = user_sub_deposits_by_id[id]
     max_level = 0
     min_from = nil
     max_to = nil
@@ -675,7 +667,7 @@ fun deposit_max_level(end_timestamp, levels_froms) do
   deposit_level = nil
 
   for level in Map.keys(levels_froms) do
-    level_from = Map.get(levels_froms, level)
+    level_from = levels_froms[level]
 
     if deposit_level == nil && end_timestamp <= level_from do
       deposit_level = level
@@ -751,4 +743,235 @@ end
 fun get_user_genesis() do
   previous_address = Chain.get_previous_address(transaction)
   Chain.get_genesis_address(previous_address)
+end
+
+fun get_state_changes_for_calculation_period() do
+  calc_from = State.get("cursor_timestamp", @START_DATE)
+  calc_to = Time.now()
+
+  timestamps = []
+
+  for sub_deposit in State.get("sub_deposits", []) do
+    if sub_deposit.from >= calc_from && sub_deposit.from < calc_to do
+      timestamps = List.append(timestamps, sub_deposit.from)
+    end
+  end
+
+  timestamps
+end
+
+fun calculate_new_rewards(state_changes) do
+  now = Time.now()
+  day = @SECONDS_IN_DAY
+
+  weight_by_level = Map.new()
+  weight_by_level = Map.set(weight_by_level, "0", 0.007)
+  weight_by_level = Map.set(weight_by_level, "1", 0.013)
+  weight_by_level = Map.set(weight_by_level, "2", 0.024)
+  weight_by_level = Map.set(weight_by_level, "3", 0.043)
+  weight_by_level = Map.set(weight_by_level, "4", 0.077)
+  weight_by_level = Map.set(weight_by_level, "5", 0.138)
+  weight_by_level = Map.set(weight_by_level, "6", 0.249)
+  weight_by_level = Map.set(weight_by_level, "7", 0.449)
+
+  rewards_allocated_at_each_year_end = Map.new()
+
+  rewards_allocated_at_each_year_end =
+    Map.set(rewards_allocated_at_each_year_end, "1", @REWARDS_YEAR_1)
+
+  rewards_allocated_at_each_year_end =
+    Map.set(rewards_allocated_at_each_year_end, "2", @REWARDS_YEAR_1 + @REWARDS_YEAR_2)
+
+  rewards_allocated_at_each_year_end =
+    Map.set(
+      rewards_allocated_at_each_year_end,
+      "3",
+      @REWARDS_YEAR_1 + @REWARDS_YEAR_2 + @REWARDS_YEAR_3
+    )
+
+  rewards_allocated_at_each_year_end =
+    Map.set(
+      rewards_allocated_at_each_year_end,
+      "4",
+      @REWARDS_YEAR_1 + @REWARDS_YEAR_2 + @REWARDS_YEAR_3 + @REWARDS_YEAR_4
+    )
+
+  end_by_year = Map.new()
+
+  for year in ["1", "2", "3", "4"] do
+    end_by_year = Map.set(end_by_year, year, @START_DATE + String.to_number(year) * 365 * day - 1)
+  end
+
+  sub_deposits = State.get("sub_deposits", [])
+  tokens_deposited = State.get("tokens_deposited", 0)
+  rewards_reserved = State.get("rewards_reserved", 0)
+  rewards_distributed = State.get("rewards_distributed", 0)
+
+  # cursor is the latest calculated state
+  # we use it to avoid looping through everything on each period
+  initial_cursor = [
+    timestamp: State.get("cursor_timestamp", @START_DATE),
+    year: State.get("cursor_year", "1"),
+    remaining_until_end_of_year: State.get("cursor_remaining_until_end_of_year", 365 * day - 1),
+    weighted_tokens_total: State.get("weighted_tokens_total", 0),
+    weighted_tokens_by_level: State.get("weighted_tokens_by_level", Map.new())
+  ]
+
+  cursor_by_timestamp = Map.set(Map.new(), initial_cursor.timestamp, initial_cursor)
+
+  updated_cursor = initial_cursor
+  updated_sub_deposits = sub_deposits
+
+  if initial_cursor.timestamp < now && initial_cursor.timestamp < @END_DATE &&
+       tokens_deposited > 0 do
+    previous_timestamp = initial_cursor.timestamp
+
+    for timestamp in state_changes do
+      # initiate cursor with previous one
+      cursor = cursor_by_timestamp[previous_timestamp]
+
+      # update year & remaining_until_end_of_year
+      # TODO: no need to loop on past years
+      current_year = nil
+      remaining_until_end_of_year = nil
+
+      for year in Map.keys(end_by_year) do
+        year_end = end_by_year[year]
+
+        if current_year == nil && timestamp < year_end do
+          current_year = year
+          remaining_until_end_of_year = year_end - timestamp
+        end
+      end
+
+      cursor = Map.set(cursor, "timestamp", timestamp)
+      cursor = Map.set(cursor, "year", current_year)
+      cursor = Map.set(cursor, "remaining_until_end_of_year", remaining_until_end_of_year)
+
+      # loop through every deposit to find state changes and update the cursor
+      for sub_deposit in sub_deposits do
+        if sub_deposit.to == timestamp do
+          # remove this sub_deposit from state
+          weighted_tokens = weight_by_level[sub_deposit.level] * sub_deposit.tokens
+
+          cursor =
+            Map.set(
+              cursor,
+              "weighted_tokens_total",
+              cursor["weighted_tokens_total"] - weighted_tokens
+            )
+
+          cursor =
+            Map.set(
+              cursor,
+              "weighted_tokens_by_level",
+              Map.set(
+                cursor["weighted_tokens_by_level"],
+                sub_deposit.level,
+                Map.get(cursor["weighted_tokens_by_level"], sub_deposit.level, 0) -
+                  weighted_tokens
+              )
+            )
+        end
+
+        if sub_deposit.from == timestamp do
+          # add this sub_deposit to state
+          weighted_tokens = weight_by_level[sub_deposit.level] * sub_deposit.tokens
+
+          cursor =
+            Map.set(
+              cursor,
+              "weighted_tokens_total",
+              cursor["weighted_tokens_total"] + weighted_tokens
+            )
+
+          cursor =
+            Map.set(
+              cursor,
+              "weighted_tokens_by_level",
+              Map.set(
+                cursor["weighted_tokens_by_level"],
+                sub_deposit.level,
+                Map.get(cursor["weighted_tokens_by_level"], sub_deposit.level, 0) +
+                  weighted_tokens
+              )
+            )
+        end
+
+        cursor_by_timestamp = Map.set(cursor_by_timestamp, timestamp, cursor)
+      end
+
+      previous_timestamp = timestamp
+    end
+
+    # CALCULATE REWARDS
+    previous_timestamp = initial_cursor.timestamp
+    timestamps = List.append(Map.keys(cursor_by_timestamp), now)
+
+    for timestamp in timestamps do
+      if timestamp != initial_cursor.timestamp do
+        cursor = cursor_by_timestamp[previous_timestamp]
+
+        # TODO: giveaway
+        giveaway_for_period = 0
+
+        rewards_allocated_at_year_end = rewards_allocated_at_each_year_end[cursor.year]
+
+        # calc rewards to allocated for the current period (cursor -> timestamp)
+        rewards_to_allocate =
+          (rewards_allocated_at_year_end - rewards_distributed - rewards_reserved) *
+            ((timestamp - cursor.timestamp) / cursor.remaining_until_end_of_year) +
+            giveaway_for_period
+
+        # allocated them by level
+        rewards_to_allocate_by_level = Map.new()
+
+        for level in Map.keys(cursor.weighted_tokens_by_level) do
+          rewards_to_allocate_by_level =
+            Map.set(
+              rewards_to_allocate_by_level,
+              level,
+              cursor.weighted_tokens_by_level[level] / cursor.weighted_tokens_total *
+                rewards_to_allocate
+            )
+        end
+
+        # set rewards to sub_deposits
+        updated_sub_deposits2 = []
+
+        for sub_deposit in updated_sub_deposits do
+          if sub_deposit.from <= previous_timestamp && sub_deposit.to > previous_timestamp do
+            weighted_tokens = weight_by_level[sub_deposit.level] * sub_deposit.tokens
+
+            rewards =
+              rewards_to_allocate_by_level[sub_deposit.level] *
+                (weighted_tokens / cursor.weighted_tokens_by_level[sub_deposit.level])
+
+            rewards_reserved = rewards_reserved + rewards
+            sub_deposit = Map.set(sub_deposit, "rewards", sub_deposit["rewards"] + rewards)
+          end
+
+          updated_sub_deposits2 = List.prepend(updated_sub_deposits2, sub_deposit)
+        end
+
+        updated_sub_deposits = updated_sub_deposits2
+        updated_cursor = cursor
+      end
+
+      # move cursor
+      previous_timestamp = timestamp
+    end
+  end
+
+  # sub_deposits are unsorted
+  # no point in sorting them if we update them right after
+  [
+    sub_deposits: updated_sub_deposits,
+    cursor_timestamp: updated_cursor.timestamp,
+    cursor_year: updated_cursor.year,
+    cursor_remaining_until_end_of_year: updated_cursor.remaining_until_end_of_year,
+    cursor_weighted_tokens_total: updated_cursor.weighted_tokens_total,
+    cursor_weighted_tokens_by_level: updated_cursor.weighted_tokens_by_level,
+    rewards_reserved: rewards_reserved
+  ]
 end

@@ -18,7 +18,7 @@ defmodule FarmLock2Test do
   @initial_balance @reward_year_1 + @reward_year_2 + @reward_year_3 + @reward_year_4
   @seconds_in_day 86400
   @start_date ~U[2024-07-17T00:00:00Z]
-  @end_date @start_date |> DateTime.add(4 * 365 * @seconds_in_day)
+  @end_date @start_date |> DateTime.add(4 * 365 * @seconds_in_day) |> DateTime.add(-1)
 
   setup do
     constants = [
@@ -718,13 +718,13 @@ defmodule FarmLock2Test do
 
   describe "scenarios" do
     @tag :scenario
-    test "a deposit is alone for 6 months", %{contract: contract} do
+    test "alone without state changes", %{contract: contract} do
       actions = [
         {:deposit,
          %{
            amount: Decimal.new(1000),
            delay: 0,
-           level: "5",
+           level: "7",
            seed: "seed"
          }},
         {:deposit,
@@ -737,6 +737,41 @@ defmodule FarmLock2Test do
       ]
 
       result_contract = run_actions(actions, contract, %{}, @initial_balance)
+
+      asserts_get_farm_infos(result_contract, actions)
+
+      # formula: (180/365) * 45_000_000 = 22191780.821917806
+      # imprecision due to rounding 8
+      asserts_get_user_infos(result_contract, "seed", actions,
+        assert_fn: fn user_infos ->
+          assert 1 == length(user_infos)
+          assert Decimal.eq?(hd(user_infos)["rewards"], "22191780.6")
+        end
+      )
+    end
+
+    @tag :scenario
+    test "alone with state changes", %{contract: contract} do
+      actions = [
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 0,
+           level: "4",
+           seed: "seed"
+         }},
+        {:deposit,
+         %{
+           amount: Decimal.new(1000),
+           delay: 180,
+           level: "2",
+           seed: "seed2"
+         }}
+      ]
+
+      result_contract = run_actions(actions, contract, %{}, @initial_balance)
+
+      IO.inspect(result_contract.state)
 
       asserts_get_farm_infos(result_contract, actions)
 
@@ -1173,7 +1208,7 @@ defmodule FarmLock2Test do
 
       result_contract = run_actions(actions, contract, %{}, @initial_balance)
 
-      IO.inspect(result_contract.state)
+      # IO.inspect(result_contract.state)
 
       asserts_get_farm_infos(result_contract, actions,
         assert_fn: fn farm_infos ->
@@ -1230,6 +1265,8 @@ defmodule FarmLock2Test do
     time_now_unix = DateTime.to_unix(time_now)
 
     farm_infos = call_function(contract, "get_farm_infos", [], time_now)
+
+    # IO.inspect(farm_infos)
 
     assert farm_infos["end_date"] == DateTime.to_unix(@end_date)
     assert farm_infos["start_date"] == DateTime.to_unix(@start_date)
@@ -1337,7 +1374,7 @@ defmodule FarmLock2Test do
         time_now
       )
 
-    IO.inspect(user_infos: user_infos)
+    # IO.inspect(user_infos: user_infos)
 
     for %{
           id: id,
