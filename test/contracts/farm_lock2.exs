@@ -101,7 +101,7 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
     # wich means from > to
     previous_from = @END_DATE
 
-    for year_period in reverse(years_periods) do
+    for year_period in List.reverse(years_periods) do
       for level in 0..max_level do
         level = String.from_number(level)
         level_to = previous_from
@@ -221,7 +221,7 @@ actions triggered_by: transaction, on: claim(deposit_id) do
   updated_sub_deposits = []
 
   for sub_deposit in res.sub_deposits do
-    if sub_deposit.id == deposit_id do
+    if sub_deposit.user == user_genesis_address && sub_deposit.id == deposit_id do
       # no need to preserve the past sub_deposits any more
       if sub_deposit.to >= now do
         sub_deposit = Map.set(sub_deposit, "rewards", 0)
@@ -334,16 +334,22 @@ actions triggered_by: transaction, on: withdraw(amount, deposit_index) do
   updated_sub_deposits = []
 
   for sub_deposit in sub_deposits do
-    if sub_deposit.id == deposit_id do
+    if sub_deposit.user == user_genesis_address && sub_deposit.id == deposit_id do
       remaining_tokens = sub_deposit.tokens - amount
-      remaining_weighted_tokens = remaining_tokens * weight_by_level[sub_deposit.level]
 
-      # no need to preserve the past sub_deposits any more
       # no need to preserve the deposit if everything is withdrawn
-      if sub_deposit.to >= now && remaining_tokens > 0 do
+      # no need to preserve the past sub_deposits any more
+      if remaining_tokens > 0 && (sub_deposit.to == @END_DATE || sub_deposit.to >= now) do
         sub_deposit = Map.set(sub_deposit, "rewards", 0)
         sub_deposit = Map.set(sub_deposit, "tokens", remaining_tokens)
-        sub_deposit = Map.set(sub_deposit, "weighted_tokens", remaining_weighted_tokens)
+
+        sub_deposit =
+          Map.set(
+            sub_deposit,
+            "weighted_tokens",
+            remaining_tokens * weight_by_level[sub_deposit.level]
+          )
+
         updated_sub_deposits = List.prepend(updated_sub_deposits, sub_deposit)
       end
     else
@@ -452,7 +458,8 @@ export fun(get_farm_infos()) do
 
   for sub_deposit in sub_deposits do
     # we only consider the sub_deposits that contains "now" (1 per deposit)
-    if now >= sub_deposit.from && now < sub_deposit.to do
+    if (now >= @END_DATE && sub_deposit.to == @END_DATE) ||
+         (now >= sub_deposit.from && now < sub_deposit.to) do
       tokens_deposited_weighted_total =
         tokens_deposited_weighted_total + sub_deposit.weighted_tokens
 
@@ -599,24 +606,20 @@ fun get_deposit(user_genesis_address, deposit_id, sub_deposits) do
   sub_deposits_relevant = []
 
   max_level = 0
-  min_from = nil
+  since = nil
   max_to = nil
   tokens = nil
   rewards = 0
 
   for sub_deposit in sub_deposits do
     if sub_deposit.user == user_genesis_address && sub_deposit.id == deposit_id do
+      since = sub_deposit.since
       sub_deposit_level = String.to_number(sub_deposit.level)
       tokens = sub_deposit.tokens
       rewards = rewards + sub_deposit.rewards
 
       # only consider the sub_deposits remaining
       if sub_deposit.to >= now do
-        if sub_deposit_level != 0 &&
-             (min_from == nil || min_from > sub_deposit.from) do
-          min_from = sub_deposit.from
-        end
-
         if sub_deposit_level != 0 &&
              (max_to == nil || max_to < sub_deposit.to) do
           max_to = sub_deposit.to
@@ -633,14 +636,9 @@ fun get_deposit(user_genesis_address, deposit_id, sub_deposits) do
 
   if tokens != nil do
     to_human = nil
-    from_human = nil
 
     if max_to != nil do
       to_human = (max_to - @START_DATE) / 86400
-    end
-
-    if min_from != nil do
-      from_human = (min_from - @START_DATE) / 86400
     end
 
     reply = [
@@ -648,8 +646,8 @@ fun get_deposit(user_genesis_address, deposit_id, sub_deposits) do
       tokens: tokens,
       rewards: rewards,
       level: String.from_number(max_level),
-      from: min_from,
-      from_human: from_human,
+      from: since,
+      from_human: (since - @START_DATE) / 86400,
       to: max_to,
       to_human: to_human
     ]
@@ -697,16 +695,6 @@ fun get_years_periods(from, to) do
   end
 
   periods
-end
-
-fun reverse(list) do
-  reversed = []
-
-  for item in list do
-    reversed = List.prepend(reversed, item)
-  end
-
-  reversed
 end
 
 fun deposit_max_level(end_timestamp, levels_froms) do
@@ -972,7 +960,7 @@ fun calculate_new_rewards(state_changes) do
       until = @END_DATE
     end
 
-    timestamps = List.append(Map.keys(cursor_by_timestamp), until)
+    timestamps = List.sort(List.append(Map.keys(cursor_by_timestamp), until))
     previous_year_reward_accumulated = 0
 
     for timestamp in timestamps do

@@ -300,14 +300,12 @@ defmodule FarmLock2Test do
             deposits <- deposits_generator(count),
             {:deposit, deposit} <- StreamData.member_of(deposits)
           ) do
-      deposit_duration_in_day = max(1, div(level_to_seconds(deposit.level), @seconds_in_day))
-
       claim =
         {:claim,
          %{
-           delay: deposit.delay + deposit_duration_in_day,
+           delay: 1460,
            seed: deposit.seed,
-           deposit_index: deposit.deposit_index
+           deposit_id: delay_to_id(deposit.delay)
          }}
 
       actions = deposits ++ [claim]
@@ -319,11 +317,14 @@ defmodule FarmLock2Test do
 
       asserts_get_farm_infos(result_contract, actions,
         assert_fn: fn farm_infos ->
-          # there's an edge case where the rewards_distributed can be 0
-          # it happens with small deposits amount that generate less than 1e-8 rewards
-          if Decimal.gt?(deposit.amount, 1) do
-            assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
-          end
+          # because rewards are relative to other deposits, there is a possibility that a deposit
+          # is never rewarded
+          assert Decimal.compare(farm_infos["rewards_distributed"], 0) in [:gt, :eq]
+
+          assert Decimal.compare(farm_infos["rewards_distributed"], @initial_balance) in [
+                   :lt,
+                   :eq
+                 ]
         end
       )
     end
@@ -334,7 +335,7 @@ defmodule FarmLock2Test do
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("withdraw", %{"amount" => 1, "deposit_index" => 0})
+      |> Trigger.named_action("withdraw", %{"amount" => 1, "deposit_id" => "0000"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
 
     mock_genesis_address([trigger])
@@ -356,7 +357,7 @@ defmodule FarmLock2Test do
 
     trigger2 =
       Trigger.new("seed", 2)
-      |> Trigger.named_action("withdraw", %{"amount" => 1, "deposit_index" => 999})
+      |> Trigger.named_action("withdraw", %{"amount" => 1, "deposit_id" => "0000"})
       |> Trigger.timestamp(@start_date |> DateTime.add(2))
 
     mock_genesis_address([trigger1, trigger2])
@@ -483,8 +484,8 @@ defmodule FarmLock2Test do
 
       asserts_get_user_infos(result_contract, deposit.seed, actions,
         assert_fn: fn user_infos ->
-          d = user_infos |> Enum.at(deposit.deposit_index)
-          assert Decimal.eq?(d["amount"], Decimal.sub(deposit.amount, withdraw_amount))
+          user_info = Enum.find(user_infos, &(&1["id"] == deposit.id))
+          assert Decimal.eq?(user_info["amount"], Decimal.sub(deposit.amount, withdraw_amount))
         end
       )
     end
@@ -1574,7 +1575,19 @@ defmodule FarmLock2Test do
     StreamData.list_of(seed_generator(), length: seeds_count)
     |> StreamData.map(fn seeds ->
       Enum.map(seeds, fn seed ->
+        Process.put("delays", [])
+
         deposit_generator(seed, opts)
+        |> Stream.reject(fn {:deposit, deposit} ->
+          delays = Process.get("delays")
+          # nonsense to have multiple operation on the same chain at the same time
+          if deposit.delay in delays do
+            true
+          else
+            Process.put("delays", [deposit.delay | delays])
+            false
+          end
+        end)
         |> Enum.take(Keyword.get(opts, :deposits_per_seed, 3))
       end)
       |> List.flatten()
@@ -1601,9 +1614,11 @@ defmodule FarmLock2Test do
     StreamData.constant(
       deposits
       |> Enum.map(fn {:deposit, d} ->
+        deposit_duration_in_day = max(1, div(level_to_seconds(d.level), @seconds_in_day))
+
         {:withdraw,
          %{
-           delay: 2000 + d.delay,
+           delay: d.delay + deposit_duration_in_day + 1,
            seed: d.seed,
            amount: d.amount,
            deposit_id: delay_to_id(d.delay)
