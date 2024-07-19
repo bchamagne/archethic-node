@@ -65,17 +65,18 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
 
   # split the deposit in many sub-deposits
   # 1 for each state change (level or year)
-  sub_deposits = []
+  deposit_splitted = []
 
   years_periods = get_years_periods(now, @END_DATE)
 
   if end_timestamp == 0 do
     # flexible
     for year_period in years_periods do
-      sub_deposits =
-        List.append(sub_deposits,
+      deposit_splitted =
+        List.append(deposit_splitted,
           user: user_genesis_address,
           id: id,
+          since: now,
           level: "0",
           year: year_period.year,
           tokens: transfer_amount,
@@ -129,10 +130,11 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
             bounded_to = level_to
           end
 
-          sub_deposits =
-            List.prepend(sub_deposits,
+          deposit_splitted =
+            List.prepend(deposit_splitted,
               user: user_genesis_address,
               id: id,
+              since: now,
               level: level,
               year: year_period.year,
               tokens: transfer_amount,
@@ -151,14 +153,22 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
   end
 
   # TODO: merge flexible
-  res = calculate_new_rewards(get_state_changes_for_calculation_period())
-  sub_deposits = res.sub_deposits ++ sub_deposits
+  sub_deposits = nil
+
+  if now > @START_DATE do
+    res = calculate_new_rewards(get_state_changes_for_calculation_period())
+    sub_deposits = res.sub_deposits
+    State.set("cursor_timestamp", res.cursor_timestamp)
+    State.set("cursor_year", res.cursor_year)
+    State.set("cursor_weighted_tokens_total", res.cursor_weighted_tokens_total)
+    State.set("cursor_weighted_tokens_by_level", res.cursor_weighted_tokens_by_level)
+    State.set("rewards_reserved", res.rewards_reserved)
+  else
+    sub_deposits = State.get("sub_deposits", [])
+  end
+
+  sub_deposits = sub_deposits ++ deposit_splitted
   State.set("sub_deposits", List.sort_by(sub_deposits, "from"))
-  State.set("cursor_timestamp", res.cursor_timestamp)
-  State.set("cursor_year", res.cursor_year)
-  State.set("cursor_weighted_tokens_total", res.cursor_weighted_tokens_total)
-  State.set("cursor_weighted_tokens_by_level", res.cursor_weighted_tokens_by_level)
-  State.set("rewards_reserved", res.rewards_reserved)
   State.set("tokens_deposited", State.get("tokens_deposited", 0) + transfer_amount)
 end
 
@@ -542,19 +552,16 @@ export fun(get_user_infos(user_genesis_address)) do
   for id in Map.keys(user_sub_deposits_by_id) do
     sub_deposits_for_id = user_sub_deposits_by_id[id]
     max_level = 0
-    min_from = nil
+    since = nil
     max_to = nil
     tokens = nil
     rewards = 0
 
     for sub_deposit in sub_deposits_for_id do
+      since = sub_deposit.since
       sub_deposit_level = String.to_number(sub_deposit.level)
       tokens = sub_deposit.tokens
       rewards = rewards + sub_deposit.rewards
-
-      if sub_deposit_level != 0 && (min_from == nil || min_from > sub_deposit.from) do
-        min_from = sub_deposit.from
-      end
 
       if sub_deposit_level != 0 && (max_to == nil || max_to < sub_deposit.to) do
         max_to = sub_deposit.to
@@ -566,26 +573,21 @@ export fun(get_user_infos(user_genesis_address)) do
     end
 
     to_human = nil
-    from_human = nil
 
     if max_to != nil do
       to_human = (max_to - @START_DATE) / 86400
     end
 
-    if min_from != nil do
-      from_human = (min_from - @START_DATE) / 86400
-    end
-
     reply =
       List.append(reply,
         id: id,
-        tokens: tokens,
-        rewards: rewards,
+        amount: tokens,
+        reward_amount: rewards,
         level: String.from_number(max_level),
-        from: min_from,
-        from_human: from_human,
-        to: max_to,
-        to_human: to_human
+        start: since,
+        start_human: (since - @START_DATE) / 86400,
+        end: max_to,
+        end_human: to_human
       )
   end
 

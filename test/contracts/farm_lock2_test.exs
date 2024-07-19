@@ -143,10 +143,10 @@ defmodule FarmLock2Test do
     check all(
             count <- StreamData.integer(1..10),
             deposits <-
-              deposits_generator(count)
+              deposits_generator(count, deposits_per_seed: 1)
               |> StreamData.map(fn deposits ->
                 Enum.map(deposits, fn {:deposit, payload} ->
-                  {:deposit, %{payload | delay: -1}}
+                  {:deposit, %{payload | delay: -1, id: delay_to_id(-1)}}
                 end)
               end),
             {:deposit, deposit} <- StreamData.member_of(deposits)
@@ -158,17 +158,17 @@ defmodule FarmLock2Test do
           # also assert that no rewards calculated
           assert Decimal.eq?(
                    0,
-                   Enum.map(user_infos, & &1["rewards"]) |> Enum.reduce(&Decimal.add/2)
+                   Enum.map(user_infos, & &1["reward_amount"]) |> Enum.reduce(&Decimal.add/2)
                  )
         end
       )
 
-      # asserts_get_farm_infos(result_contract, deposits,
-      #   assert_fn: fn farm_infos ->
-      #     # also assert that no rewards calculated
-      #     assert farm_infos["remaining_rewards"] == @initial_balance
-      #   end
-      # )
+      asserts_get_farm_infos(result_contract, deposits,
+        assert_fn: fn farm_infos ->
+          # also assert that no rewards calculated
+          assert farm_infos["remaining_rewards"] == @initial_balance
+        end
+      )
     end
   end
 
@@ -484,7 +484,7 @@ defmodule FarmLock2Test do
       asserts_get_user_infos(result_contract, deposit.seed, actions,
         assert_fn: fn user_infos ->
           d = user_infos |> Enum.at(deposit.deposit_index)
-          assert Decimal.eq?(d["tokens"], Decimal.sub(deposit.amount, withdraw_amount))
+          assert Decimal.eq?(d["amount"], Decimal.sub(deposit.amount, withdraw_amount))
         end
       )
     end
@@ -745,7 +745,7 @@ defmodule FarmLock2Test do
       asserts_get_user_infos(result_contract, "seed", actions,
         assert_fn: fn user_infos ->
           assert 1 == length(user_infos)
-          assert Decimal.eq?(hd(user_infos)["rewards"], "22191780.6")
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "22191780.6")
         end
       )
     end
@@ -778,7 +778,7 @@ defmodule FarmLock2Test do
       asserts_get_user_infos(result_contract, "seed", actions,
         assert_fn: fn user_infos ->
           assert 1 == length(user_infos)
-          assert Decimal.eq?(hd(user_infos)["rewards"], "22191780.32276441")
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "22191780.32276441")
         end
       )
     end
@@ -809,7 +809,7 @@ defmodule FarmLock2Test do
       asserts_get_user_infos(result_contract, "seed", actions,
         assert_fn: fn user_infos ->
           assert 1 == length(user_infos)
-          assert Decimal.eq?(hd(user_infos)["rewards"], "22684931.28")
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "22684931.28")
         end
       )
     end
@@ -856,14 +856,14 @@ defmodule FarmLock2Test do
       asserts_get_user_infos(result_contract, "seed", actions,
         assert_fn: fn user_infos ->
           assert 1 == length(user_infos)
-          assert Decimal.eq?(hd(user_infos)["rewards"], "20834375.85215356")
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "20834375.85215356")
         end
       )
 
       asserts_get_user_infos(result_contract, "seed2", actions,
         assert_fn: fn user_infos ->
           assert 1 == length(user_infos)
-          assert Decimal.eq?(hd(user_infos)["rewards"], "1357404.07397377")
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "1357404.07397377")
         end
       )
     end
@@ -910,8 +910,8 @@ defmodule FarmLock2Test do
       asserts_get_user_infos(result_contract, "seed", actions,
         assert_fn: fn user_infos ->
           assert 2 == length(user_infos)
-          assert Decimal.eq?(Enum.at(user_infos, 0)["rewards"], "20834375.85215356")
-          assert Decimal.eq?(Enum.at(user_infos, 1)["rewards"], "1357404.07397377")
+          assert Decimal.eq?(Enum.at(user_infos, 0)["reward_amount"], "20834375.85215356")
+          assert Decimal.eq?(Enum.at(user_infos, 1)["reward_amount"], "1357404.07397377")
         end
       )
     end
@@ -1032,7 +1032,7 @@ defmodule FarmLock2Test do
           # period: 0-365, 365-370
           # 45_000_000 + ((5/365)*22_500_000) = 45308219.17808219
           # imprecision due to rounding 8
-          assert Decimal.eq?(hd(user_infos)["rewards"], "45308219.175")
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "45308219.175")
         end
       )
     end
@@ -1064,7 +1064,7 @@ defmodule FarmLock2Test do
 
           # period: 5-365
           # 45_000_000
-          assert Decimal.eq?(hd(user_infos)["rewards"], "45000000")
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "45000000")
         end
       )
     end
@@ -1390,13 +1390,13 @@ defmodule FarmLock2Test do
       user_info = Enum.find(user_infos, &(&1["id"] == id))
       refute is_nil(user_info)
 
-      assert Decimal.eq?(amount, user_info["tokens"])
-      assert Decimal.compare(user_info["rewards"], 0) in [:eq, :gt]
+      assert Decimal.eq?(amount, user_info["amount"])
+      assert Decimal.compare(user_info["reward_amount"], 0) in [:eq, :gt]
       assert end_to_level(end_timestamp, time_now) == user_info["level"]
 
       if end_timestamp > DateTime.to_unix(time_now) do
-        assert start_timestamp == user_info["from"]
-        assert end_timestamp == user_info["to"]
+        assert start_timestamp == user_info["start"]
+        assert end_timestamp == user_info["end"]
       end
     end
 
@@ -1462,7 +1462,7 @@ defmodule FarmLock2Test do
               end_timestamp:
                 end_timestamp
                 |> DateTime.to_unix(),
-              id: start_timestamp |> DateTime.to_unix() |> Integer.to_string()
+              id: delay_to_id(payload.delay)
             }
 
             user_deposits ++ [deposit]
@@ -1576,11 +1576,6 @@ defmodule FarmLock2Test do
       Enum.map(seeds, fn seed ->
         deposit_generator(seed, opts)
         |> Enum.take(Keyword.get(opts, :deposits_per_seed, 3))
-        |> Enum.sort_by(&(elem(&1, 1) |> Access.get(:delay)))
-        |> Enum.with_index()
-        |> Enum.map(fn {{:deposit, deposit}, i} ->
-          {:deposit, Map.put(deposit, :deposit_index, i)}
-        end)
       end)
       |> List.flatten()
       |> Enum.sort_by(&(elem(&1, 1) |> Access.get(:delay)))
@@ -1595,6 +1590,7 @@ defmodule FarmLock2Test do
        %{
          amount: amount,
          delay: delay,
+         id: delay_to_id(delay),
          level: level,
          seed: seed
        }}
