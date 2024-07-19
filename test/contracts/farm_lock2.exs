@@ -174,8 +174,10 @@ condition triggered_by: transaction, on: claim(deposit_id) do
   end
 
   now = Time.now()
+  res = calculate_new_rewards(get_state_changes_for_calculation_period())
+
   user_genesis_address = get_user_genesis()
-  user_deposit = get_deposit(user_genesis_address, deposit_id, State.get("sub_deposits", []))
+  user_deposit = get_deposit(user_genesis_address, deposit_id, res.sub_deposits)
 
   if user_deposit == nil do
     throw(message: "deposit not found", code: 2000)
@@ -185,27 +187,18 @@ condition triggered_by: transaction, on: claim(deposit_id) do
     throw(message: "claiming before end of lock", code: 2002)
   end
 
-  # TODO: CALCULATIONS
-  # TODO: user_deposit.rewards > 0
-  true
+  user_deposit.rewards > 0
 end
 
 actions triggered_by: transaction, on: claim(deposit_id) do
   now = Time.now()
-
-  # TODO: CALCULATIONS
-  # FIXME: should be res.rewards_reserved
-  rewards_reserved = State.get("rewards_reserved", 0)
-  # FIXME: should be res.sub_deposits
-  sub_deposits = State.get("sub_deposits", [])
-
+  res = calculate_new_rewards(get_state_changes_for_calculation_period())
   user_genesis_address = get_user_genesis()
-  user_deposit = get_deposit(user_genesis_address, deposit_id, State.get("sub_deposits", []))
+  user_deposit = get_deposit(user_genesis_address, deposit_id, res.sub_deposits)
 
   # transfer the rewards
   if @REWARD_TOKEN == "UCO" do
-    # TODO user_deposit.rewards)
-    Contract.add_uco_transfer(to: transaction.address, amount: 42)
+    Contract.add_uco_transfer(to: transaction.address, amount: user_deposit.rewards)
   else
     Contract.add_token_transfer(
       to: transaction.address,
@@ -214,10 +207,10 @@ actions triggered_by: transaction, on: claim(deposit_id) do
     )
   end
 
-  # clean rewards from subdeposits
+  # clean rewards from sub_deposits
   updated_sub_deposits = []
 
-  for sub_deposit in sub_deposits do
+  for sub_deposit in res.sub_deposits do
     if sub_deposit.id == deposit_id do
       # no need to preserve the past sub_deposits any more
       if sub_deposit.to >= now do
@@ -231,8 +224,13 @@ actions triggered_by: transaction, on: claim(deposit_id) do
 
   State.set("sub_deposits", List.sort_by(updated_sub_deposits, "from"))
   State.set("rewards_distributed", State.get("rewards_distributed", 0) + user_deposit.rewards)
-  State.set("rewards_reserved", rewards_reserved - user_deposit.rewards)
-  State.set("cursor", now)
+  State.set("rewards_reserved", res.rewards_reserved - user_deposit.rewards)
+
+  # update cursor
+  State.set("cursor_weighted_tokens_total", res.cursor_weighted_tokens_total)
+  State.set("cursor_weighted_tokens_by_level", res.cursor_weighted_tokens_by_level)
+  State.set("cursor_timestamp", res.cursor_timestamp)
+  State.set("cursor_year", res.cursor_year)
 end
 
 #           _ _   _         _
@@ -595,6 +593,7 @@ export fun(get_user_infos(user_genesis_address)) do
 end
 
 fun get_deposit(user_genesis_address, deposit_id, sub_deposits) do
+  now = Time.now()
   sub_deposits_relevant = []
 
   max_level = 0
@@ -802,7 +801,7 @@ fun get_state_changes_for_calculation_period() do
     end
   end
 
-  timestamps
+  List.uniq(timestamps)
 end
 
 fun calculate_new_rewards(state_changes) do
@@ -842,6 +841,16 @@ fun calculate_new_rewards(state_changes) do
   rewards_reserved = State.get("rewards_reserved", 0)
   rewards_distributed = State.get("rewards_distributed", 0)
 
+  # retrieve remaining balance
+  rewards_balance = nil
+
+  if @REWARD_TOKEN == "UCO" do
+    rewards_balance = contract.balance.uco
+  else
+    key = [token_address: @REWARD_TOKEN, token_id: 0]
+    rewards_balance = Map.get(contract.balance.tokens, key, 0)
+  end
+
   # cursor is the latest calculated state
   # we use it to avoid looping through everything on each period
   initial_cursor = [
@@ -851,6 +860,23 @@ fun calculate_new_rewards(state_changes) do
     weighted_tokens_total: State.get("cursor_weighted_tokens_total", 0),
     weighted_tokens_by_level: State.get("cursor_weighted_tokens_by_level", Map.new())
   ]
+
+  time_elapsed_since_last_calc = now - initial_cursor.timestamp
+  time_remaining_until_farm_end = @END_DATE - initial_cursor.timestamp
+
+  # giveaways are donation on the pool that are not part of the initial rewards
+  giveaways =
+    rewards_balance + rewards_distributed -
+      (@REWARDS_YEAR_1 + @REWARDS_YEAR_2 + @REWARDS_YEAR_3 + @REWARDS_YEAR_4)
+
+  giveaways_to_allocate = nil
+
+  if now < @END_DATE do
+    giveaways_to_allocate =
+      giveaways * (time_elapsed_since_last_calc / time_remaining_until_farm_end)
+  else
+    giveaways_to_allocate = giveaways
+  end
 
   cursor_by_timestamp = Map.set(Map.new(), initial_cursor.timestamp, initial_cursor)
 
@@ -887,7 +913,6 @@ fun calculate_new_rewards(state_changes) do
       for sub_deposit in sub_deposits do
         if sub_deposit.to == timestamp do
           # remove this sub_deposit from state
-
           cursor =
             Map.set(
               cursor,
@@ -910,7 +935,6 @@ fun calculate_new_rewards(state_changes) do
 
         if sub_deposit.from == timestamp do
           # add this sub_deposit to state
-
           cursor =
             Map.set(
               cursor,
@@ -954,8 +978,9 @@ fun calculate_new_rewards(state_changes) do
         cursor = cursor_by_timestamp[previous_timestamp]
 
         if cursor.weighted_tokens_total > 0 do
-          # TODO: giveaway
-          giveaway_for_period = 0
+          giveaway_for_period =
+            giveaways_to_allocate *
+              ((timestamp - cursor.timestamp) / time_elapsed_since_last_calc)
 
           rewards_allocated_at_year_end = rewards_allocated_at_each_year_end[cursor.year]
 
@@ -988,7 +1013,7 @@ fun calculate_new_rewards(state_changes) do
           updated_sub_deposits2 = []
 
           for sub_deposit in updated_sub_deposits do
-            if sub_deposit.from <= previous_timestamp && sub_deposit.to > previous_timestamp do
+            if sub_deposit.from <= cursor.timestamp && sub_deposit.to > cursor.timestamp do
               rewards =
                 rewards_to_allocate_by_level[sub_deposit.level] *
                   (sub_deposit.weighted_tokens /

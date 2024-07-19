@@ -245,13 +245,13 @@ defmodule FarmLock2Test do
     trigger1 =
       Trigger.new("seed", 1)
       |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
-      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.timestamp(@start_date |> DateTime.add(1, :day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
     trigger2 =
       Trigger.new("seed", 2)
-      |> Trigger.named_action("claim", %{"deposit_index" => 0})
-      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+      |> Trigger.named_action("claim", %{"deposit_id" => delay_to_id(1)})
+      |> Trigger.timestamp(@start_date |> DateTime.add(2, :day))
 
     mock_genesis_address([trigger1, trigger2])
 
@@ -274,12 +274,12 @@ defmodule FarmLock2Test do
     trigger1 =
       Trigger.new("seed", 1)
       |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
-      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.timestamp(@start_date |> DateTime.add(1, :day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("0.00000143"))
 
     trigger2 =
       Trigger.new("seed", 2)
-      |> Trigger.named_action("claim", %{"deposit_index" => 0})
+      |> Trigger.named_action("claim", %{"deposit_id" => delay_to_id(1)})
       |> Trigger.timestamp(@start_date |> DateTime.add(2))
 
     mock_genesis_address([trigger0, trigger1, trigger2])
@@ -374,13 +374,13 @@ defmodule FarmLock2Test do
     trigger1 =
       Trigger.new("seed", 1)
       |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
-      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.timestamp(@start_date |> DateTime.add(1, :day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
     trigger2 =
       Trigger.new("seed", 2)
-      |> Trigger.named_action("withdraw", %{"amount" => 2, "deposit_index" => 0})
-      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+      |> Trigger.named_action("withdraw", %{"amount" => 2, "deposit_id" => delay_to_id(1)})
+      |> Trigger.timestamp(@start_date |> DateTime.add(2, :day))
 
     mock_genesis_address([trigger1, trigger2])
 
@@ -397,13 +397,13 @@ defmodule FarmLock2Test do
     trigger1 =
       Trigger.new("seed", 1)
       |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
-      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.timestamp(@start_date |> DateTime.add(1, :day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
     trigger2 =
       Trigger.new("seed", 2)
-      |> Trigger.named_action("withdraw", %{"amount" => 1, "deposit_index" => 0})
-      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+      |> Trigger.named_action("withdraw", %{"amount" => 1, "deposit_id" => delay_to_id(1)})
+      |> Trigger.timestamp(@start_date |> DateTime.add(2, :day))
 
     mock_genesis_address([trigger1, trigger2])
 
@@ -1180,25 +1180,25 @@ defmodule FarmLock2Test do
          %{
            amount: Decimal.new(1000),
            delay: 0,
-           level: "5",
+           level: "0",
            seed: "seed"
          }},
         {:deposit,
          %{
            amount: Decimal.new(1000),
            delay: 5,
-           level: "5",
+           level: "0",
            seed: "seed2"
          }},
         {:claim,
          %{
-           delay: 1000,
+           delay: 10,
            deposit_id: delay_to_id(0),
            seed: "seed"
          }},
         {:claim,
          %{
-           delay: 1001,
+           delay: 15,
            deposit_id: delay_to_id(5),
            seed: "seed2"
          }}
@@ -1669,5 +1669,6 @@ defmodule FarmLock2Test do
     @start_date
     |> DateTime.add(delay * @seconds_in_day)
     |> DateTime.to_unix()
+    |> Integer.to_string()
   end
 end
