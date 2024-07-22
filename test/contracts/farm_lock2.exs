@@ -368,6 +368,45 @@ actions triggered_by: transaction, on: withdraw(amount, deposit_index) do
   State.set("tokens_deposited", State.get("tokens_deposited", 0) - amount)
 end
 
+#                  _       _                        _
+#  _   _ _ __   __| | __ _| |_ ___     ___ ___   __| | ___
+# | | | | '_ \ / _` |/ _` | __/ _ \   / __/ _ \ / _` |/ _ \
+# | |_| | |_) | (_| | (_| | ||  __/  | (_| (_) | (_| |  __/
+#  \__,_| .__/ \__,_|\__,_|\__\_______\___\___/ \__,_|\___|
+#       |_|                      |_____|
+condition(
+  triggered_by: transaction,
+  on: update_code(),
+  as: [
+    previous_public_key:
+      (
+        # Pool code can only be updated from the router contract of the dex
+
+        # Transaction is not yet validated so we need to use previous address
+        # to get the genesis address
+        previous_address = Chain.get_previous_address()
+        Chain.get_genesis_address(previous_address) == @ROUTER_ADDRESS
+      )
+  ]
+)
+
+actions triggered_by: transaction, on: update_code() do
+  params = [
+    @LP_TOKEN_ADDRESS,
+    @START_DATE,
+    @END_DATE,
+    @REWARD_TOKEN,
+    @FARM_ADDRESS
+  ]
+
+  new_code = Contract.call_function(@FACTORY_ADDRESS, "get_farm_lock_code", params)
+
+  if Code.is_valid?(new_code) && !Code.is_same?(new_code, contract.code) do
+    Contract.set_type("contract")
+    Contract.set_code(new_code)
+  end
+end
+
 #             _    __                      _        __
 #   __ _  ___| |_ / _| __ _ _ __ _ __ ___ (_)_ __  / _| ___  ___
 #  / _` |/ _ | __| |_ / _` | '__| '_ ` _ \| | '_ \| |_ / _ \/ __|
