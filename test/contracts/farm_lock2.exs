@@ -88,9 +88,7 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
           weighted_tokens: transfer_amount * weight_by_level["0"],
           rewards: 0,
           from: year_period.from,
-          from_human: (year_period.from - @START_DATE) / 86400,
-          to: year_period.to,
-          to_human: (year_period.to - @START_DATE) / 86400
+          to: year_period.to
         )
     end
   else
@@ -146,9 +144,7 @@ actions triggered_by: transaction, on: deposit(end_timestamp) do
               weighted_tokens: transfer_amount * weight_by_level[level],
               rewards: 0,
               from: bounded_from,
-              from_human: (bounded_from - @START_DATE) / 86400,
-              to: bounded_to,
-              to_human: (bounded_to - @START_DATE) / 86400
+              to: bounded_to
             )
 
           previous_from = bounded_from
@@ -594,7 +590,6 @@ export fun(get_user_infos(user_genesis_address)) do
   # we use it to avoid looping through everything on each period
   initial_cursor = [
     timestamp: State.get("cursor_timestamp", @START_DATE),
-    timestamp_human: (State.get("cursor_timestamp", @START_DATE) - @START_DATE) / 86400,
     year: State.get("cursor_year", "1"),
     weighted_tokens_total: State.get("cursor_weighted_tokens_total", 0),
     weighted_tokens_by_level: State.get("cursor_weighted_tokens_by_level", Map.new())
@@ -690,7 +685,6 @@ export fun(get_user_infos(user_genesis_address)) do
         end
 
         cursor = Map.set(cursor, "timestamp", timestamp)
-        cursor = Map.set(cursor, "timestamp_human", (timestamp - @START_DATE) / 86400)
         cursor = Map.set(cursor, "year", current_year)
 
         # loop through every deposit to find state changes and update the cursor
@@ -877,12 +871,6 @@ export fun(get_user_infos(user_genesis_address)) do
       end
     end
 
-    to_human = nil
-
-    if max_to != nil do
-      to_human = (max_to - @START_DATE) / 86400
-    end
-
     reply =
       List.append(reply,
         id: id,
@@ -890,9 +878,7 @@ export fun(get_user_infos(user_genesis_address)) do
         reward_amount: rewards,
         level: String.from_number(max_level),
         start: since,
-        start_human: (since - @START_DATE) / 86400,
-        end: max_to,
-        end_human: to_human
+        end: max_to
       )
   end
 
@@ -933,21 +919,13 @@ fun get_deposit(user_genesis_address, deposit_id, sub_deposits) do
   reply = nil
 
   if tokens != nil do
-    to_human = nil
-
-    if max_to != nil do
-      to_human = (max_to - @START_DATE) / 86400
-    end
-
     reply = [
       id: deposit_id,
       tokens: tokens,
       rewards: rewards,
       level: String.from_number(max_level),
       from: since,
-      from_human: (since - @START_DATE) / 86400,
-      to: max_to,
-      to_human: to_human
+      to: max_to
     ]
   end
 
@@ -985,9 +963,7 @@ fun get_years_periods(from, to) do
         List.append(periods,
           year: year.year,
           from: bounded_from,
-          from_human: (bounded_from - @START_DATE) / 86400,
-          to: bounded_to,
-          to_human: (bounded_to - @START_DATE) / 86400
+          to: bounded_to
         )
     end
   end
@@ -1095,7 +1071,6 @@ fun calculate_new_rewards() do
   # we use it to avoid looping through everything on each period
   initial_cursor = [
     timestamp: State.get("cursor_timestamp", @START_DATE),
-    timestamp_human: (State.get("cursor_timestamp", @START_DATE) - @START_DATE) / 86400,
     year: State.get("cursor_year", "1"),
     weighted_tokens_total: State.get("cursor_weighted_tokens_total", 0),
     weighted_tokens_by_level: State.get("cursor_weighted_tokens_by_level", Map.new())
@@ -1191,7 +1166,6 @@ fun calculate_new_rewards() do
         end
 
         cursor = Map.set(cursor, "timestamp", timestamp)
-        cursor = Map.set(cursor, "timestamp_human", (timestamp - @START_DATE) / 86400)
         cursor = Map.set(cursor, "year", current_year)
 
         # loop through every deposit to find state changes and update the cursor
