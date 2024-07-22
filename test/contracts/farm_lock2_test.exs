@@ -62,7 +62,10 @@ defmodule FarmLock2Test do
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(7, :day) |> DateTime.to_unix() |> Integer.to_string()
+      })
       |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("0.0000014"))
 
@@ -77,7 +80,10 @@ defmodule FarmLock2Test do
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(7, :day) |> DateTime.to_unix() |> Integer.to_string()
+      })
       |> Trigger.timestamp(@start_date)
 
     assert {:throw, 1003} =
@@ -93,7 +99,10 @@ defmodule FarmLock2Test do
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(7, :day) |> DateTime.to_unix() |> Integer.to_string()
+      })
       |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@invalid_address, 0, @farm_address, Decimal.new(100))
 
@@ -111,7 +120,7 @@ defmodule FarmLock2Test do
       |> Trigger.named_action("deposit", %{
         "end_timestamp" => @end_date |> DateTime.add(1) |> DateTime.to_unix()
       })
-      |> Trigger.timestamp(@start_date)
+      |> Trigger.timestamp(@start_date |> DateTime.add(366, :day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(100))
 
     assert {:throw, 1005} =
@@ -132,6 +141,24 @@ defmodule FarmLock2Test do
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(100))
 
     assert {:throw, 1006} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger)
+  end
+
+  test "deposit/1 should throw when lock is longer than 3 years", %{contract: contract} do
+    state = %{}
+
+    trigger =
+      Trigger.new()
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(3 * 365 * @seconds_in_day + 1) |> DateTime.to_unix()
+      })
+      |> Trigger.timestamp(@start_date)
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(100))
+
+    assert {:throw, 1007} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger)
@@ -221,7 +248,10 @@ defmodule FarmLock2Test do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(7, :day) |> DateTime.to_unix() |> Integer.to_string()
+      })
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -244,7 +274,10 @@ defmodule FarmLock2Test do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(7, :day) |> DateTime.to_unix() |> Integer.to_string()
+      })
       |> Trigger.timestamp(@start_date |> DateTime.add(1, :day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -267,8 +300,11 @@ defmodule FarmLock2Test do
 
     trigger0 =
       Trigger.new("seed2", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
-      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(3 * 365, :day) |> DateTime.to_unix() |> Integer.to_string()
+      })
+      |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("999999999999"))
 
     trigger1 =
@@ -351,7 +387,10 @@ defmodule FarmLock2Test do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(7, :day) |> DateTime.to_unix() |> Integer.to_string()
+      })
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -374,7 +413,10 @@ defmodule FarmLock2Test do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(7, :day) |> DateTime.to_unix() |> Integer.to_string()
+      })
       |> Trigger.timestamp(@start_date |> DateTime.add(1, :day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -397,7 +439,10 @@ defmodule FarmLock2Test do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(7, :day) |> DateTime.to_unix() |> Integer.to_string()
+      })
       |> Trigger.timestamp(@start_date |> DateTime.add(1, :day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 

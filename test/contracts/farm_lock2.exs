@@ -8,6 +8,7 @@
 
 condition triggered_by: transaction, on: deposit(end_timestamp) do
   now = Time.now()
+  day = @SECONDS_IN_DAY
 
   if end_timestamp == "max" do
     end_timestamp = @END_DATE
@@ -15,6 +16,10 @@ condition triggered_by: transaction, on: deposit(end_timestamp) do
 
   if end_timestamp == "flex" do
     end_timestamp = 0
+  end
+
+  if end_timestamp - now > 3 * 365 * day do
+    throw(message: "can't lock for more than 3 years", code: 1007)
   end
 
   if transaction.timestamp >= @END_DATE do
