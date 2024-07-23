@@ -876,6 +876,68 @@ defmodule VestingTest do
     end
   end
 
+  test "calculate_rewards/0 should throw if farm has not started yet", %{contract: contract} do
+    state = %{}
+
+    trigger =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("calculate_rewards", %{})
+      |> Trigger.timestamp(@start_date |> DateTime.add(-1))
+
+    assert {:throw, 5000} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger)
+  end
+
+  test "calculate_rewards/0 should throw if farm has ended", %{contract: contract} do
+    state = %{}
+
+    trigger =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("calculate_rewards", %{})
+      |> Trigger.timestamp(@end_date |> DateTime.add(1 * @seconds_in_day))
+
+    assert {:throw, 5001} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger)
+  end
+
+  test "calculate_rewards/0 should throw if already calculated", %{contract: contract} do
+    state = %{}
+
+    trigger1 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" => @start_date |> DateTime.add(10 * @seconds_in_day) |> DateTime.to_unix()
+      })
+      |> Trigger.timestamp(@start_date)
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+    trigger2 =
+      Trigger.new("seed2", 1)
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" => @start_date |> DateTime.add(10 * @seconds_in_day) |> DateTime.to_unix()
+      })
+      |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+    trigger3 =
+      Trigger.new("seed3", 1)
+      |> Trigger.named_action("calculate_rewards", %{})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day) |> DateTime.add(1))
+
+    mock_genesis_address([trigger1, trigger2, trigger3])
+
+    assert {:throw, 5002} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger1)
+             |> trigger_contract(trigger2)
+             |> trigger_contract(trigger3)
+  end
+
   describe "scenarios" do
     @tag :scenario
     test "a deposit is alone for 6 months", %{contract: contract} do
