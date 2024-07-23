@@ -47,7 +47,7 @@ defmodule VestingTest do
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
       |> Trigger.timestamp(@end_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -64,7 +64,7 @@ defmodule VestingTest do
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
       |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("0.0000014"))
 
@@ -79,7 +79,7 @@ defmodule VestingTest do
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
       |> Trigger.timestamp(@start_date)
 
     assert {:throw, 1003} =
@@ -95,7 +95,7 @@ defmodule VestingTest do
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
       |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@invalid_address, 0, @farm_address, Decimal.new(100))
 
@@ -113,7 +113,7 @@ defmodule VestingTest do
       |> Trigger.named_action("deposit", %{
         "end_timestamp" => @end_date |> DateTime.add(1) |> DateTime.to_unix()
       })
-      |> Trigger.timestamp(@start_date)
+      |> Trigger.timestamp(@start_date |> DateTime.add(366 * @seconds_in_day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(100))
 
     assert {:throw, 1005} =
@@ -134,6 +134,24 @@ defmodule VestingTest do
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(100))
 
     assert {:throw, 1006} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger)
+  end
+
+  test "deposit/1 should throw when lock is longer than 3 years", %{contract: contract} do
+    state = %{}
+
+    trigger =
+      Trigger.new()
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(3 * 365 * @seconds_in_day + 1) |> DateTime.to_unix()
+      })
+      |> Trigger.timestamp(@start_date)
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(100))
+
+    assert {:throw, 1007} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger)
@@ -223,7 +241,7 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -246,7 +264,10 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(7, :day) |> DateTime.to_unix() |> Integer.to_string()
+      })
       |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -269,7 +290,10 @@ defmodule VestingTest do
 
     trigger0 =
       Trigger.new("seed2", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(365, :day) |> DateTime.to_unix() |> Integer.to_string()
+      })
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("999999999999"))
 
@@ -299,31 +323,49 @@ defmodule VestingTest do
   } do
     check all(
             count <- StreamData.integer(1..10),
-            deposits <- deposits_generator(count),
-            {:deposit, deposit} <- StreamData.member_of(deposits)
+            deposits <- deposits_generator(count)
           ) do
-      deposit_duration_in_day = max(1, div(level_to_seconds(deposit.level), @seconds_in_day))
+      result_contract = run_actions(deposits, contract, %{}, @initial_balance)
+
+      # because flexible are merged we can't use the original deposits to generaate claim
+      user_genesis_address = Enum.random(Map.keys(result_contract.state["deposits"]))
+      deposit = Enum.random(result_contract.state["deposits"][user_genesis_address])
+
+      deposit_seed =
+        Enum.find(deposits, fn {:deposit, d} ->
+          {genesis_public_key, _} = Crypto.derive_keypair(d.seed, 0)
+          genesis_address = Crypto.derive_address(genesis_public_key) |> Base.encode16()
+          genesis_address == user_genesis_address
+        end)
+        |> then(fn {:deposit, d} -> d.seed end)
 
       claim =
         {:claim,
          %{
-           delay: deposit.delay + deposit_duration_in_day,
-           seed: deposit.seed,
-           deposit_id: deposit.deposit_id
+           delay: 2000,
+           seed: deposit_seed,
+           deposit_id: deposit["id"]
          }}
+
+      result_contract =
+        run_actions([claim], result_contract, result_contract.state, result_contract.uco_balance,
+          ignore_condition_failed: true
+        )
 
       actions = deposits ++ [claim]
 
-      result_contract =
-        run_actions(actions, contract, %{}, @initial_balance, ignore_condition_failed: true)
-
-      asserts_get_user_infos(result_contract, deposit.seed, actions)
+      asserts_get_user_infos(result_contract, deposit_seed, actions,
+        assert_fn: fn user_infos ->
+          user_info = Enum.find(user_infos, &(&1["id"] == deposit["id"]))
+          assert user_info["reward_amount"] == 0
+        end
+      )
 
       asserts_get_farm_infos(result_contract, actions,
         assert_fn: fn farm_infos ->
           # there's an edge case where the rewards_distributed can be 0
           # it happens with small deposits amount that generate less than 1e-8 rewards
-          if Decimal.gt?(deposit.amount, 1) do
+          if Decimal.gt?(deposit["amount"], 1) do
             assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
           end
         end
@@ -352,7 +394,7 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -375,7 +417,7 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -398,7 +440,13 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "max"})
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" =>
+          @start_date
+          |> DateTime.add(7 * @seconds_in_day)
+          |> DateTime.to_unix()
+          |> Integer.to_string()
+      })
       |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -571,7 +619,10 @@ defmodule VestingTest do
 
     trigger =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("relock", %{"end_timestamp" => "max", "deposit_id" => "xx"})
+      |> Trigger.named_action("relock", %{
+        "end_timestamp" => @start_date |> DateTime.add(1 * @seconds_in_day) |> DateTime.to_unix(),
+        "deposit_id" => "xx"
+      })
       |> Trigger.timestamp(@start_date |> DateTime.add(2))
 
     mock_genesis_address([trigger])
@@ -595,7 +646,10 @@ defmodule VestingTest do
 
     trigger2 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("relock", %{"end_timestamp" => "max", "deposit_id" => "xx"})
+      |> Trigger.named_action("relock", %{
+        "end_timestamp" => @start_date |> DateTime.add(1 * @seconds_in_day) |> DateTime.to_unix(),
+        "deposit_id" => "xx"
+      })
       |> Trigger.timestamp(@start_date |> DateTime.add(2))
 
     mock_genesis_address([trigger1, trigger2])
@@ -641,18 +695,19 @@ defmodule VestingTest do
     trigger1 =
       Trigger.new("seed", 1)
       |> Trigger.named_action("deposit", %{
-        "end_timestamp" => @start_date |> DateTime.add(1 * @seconds_in_day) |> DateTime.to_unix()
+        "end_timestamp" =>
+          @start_date |> DateTime.add(370 * @seconds_in_day) |> DateTime.to_unix()
       })
-      |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
+      |> Trigger.timestamp(@start_date |> DateTime.add(366 * @seconds_in_day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
     trigger2 =
       Trigger.new("seed", 1)
       |> Trigger.named_action("relock", %{
         "end_timestamp" => @end_date |> DateTime.add(1) |> DateTime.to_unix(),
-        "deposit_id" => delay_to_id(1)
+        "deposit_id" => delay_to_id(366)
       })
-      |> Trigger.timestamp(@start_date |> DateTime.add(2 * @seconds_in_day))
+      |> Trigger.timestamp(@start_date |> DateTime.add(367 * @seconds_in_day))
 
     mock_genesis_address([trigger1, trigger2])
 
@@ -757,19 +812,48 @@ defmodule VestingTest do
              |> trigger_contract(trigger2)
   end
 
+  test "relock/2 should throw when lock is longer than 3 years", %{contract: contract} do
+    state = %{}
+
+    trigger1 =
+      Trigger.new("seed", 1)
+      |> Trigger.named_action("deposit", %{
+        "end_timestamp" => @start_date |> DateTime.add(10 * @seconds_in_day) |> DateTime.to_unix()
+      })
+      |> Trigger.timestamp(@start_date)
+      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
+
+    trigger2 =
+      Trigger.new("seed", 2)
+      |> Trigger.named_action("relock", %{
+        "end_timestamp" =>
+          @start_date |> DateTime.add(3 * 365 * @seconds_in_day + 1) |> DateTime.to_unix(),
+        "deposit_id" => delay_to_id(0)
+      })
+      |> Trigger.timestamp(@start_date)
+
+    mock_genesis_address([trigger1, trigger2])
+
+    assert {:throw, 4007} =
+             contract
+             |> prepare_contract(state)
+             |> trigger_contract(trigger1)
+             |> trigger_contract(trigger2)
+  end
+
   property "relock/2 should transfer the rewards and update the state", %{
     contract: contract
   } do
     check all(
             count <- StreamData.integer(1..10),
-            deposits <- deposits_generator(count, max_level: 5),
-            {:deposit, deposit_to_relock} <- StreamData.member_of(deposits)
+            deposits <- deposits_generator(count, min_level: 5, max_level: 5),
+            {:deposit, deposit} <- StreamData.member_of(deposits)
           ) do
       relock = %{
-        delay: deposit_to_relock.delay + 1,
-        seed: deposit_to_relock.seed,
-        end_timestamp: "max",
-        deposit_id: deposit_to_relock.deposit_id
+        delay: deposit.delay + 1,
+        seed: deposit.seed,
+        end_timestamp: @start_date |> DateTime.add(800 * @seconds_in_day) |> DateTime.to_unix(),
+        deposit_id: deposit.deposit_id
       }
 
       actions = deposits ++ [{:relock, relock}]
