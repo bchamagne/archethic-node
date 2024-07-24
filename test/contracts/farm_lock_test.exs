@@ -1422,6 +1422,20 @@ defmodule VestingTest do
       IO.puts("#{System.monotonic_time(:millisecond) - start}ms get_farm_infos")
       assert true
     end
+
+    @tag :benchmark
+    test "calculate_rewards", %{contract: contract} do
+      start = System.monotonic_time(:millisecond)
+
+      actions = [
+        {:calculate, %{datetime: ~U[2024-07-23T21:00:00Z], delay: 9999, seed: "bastien"}}
+      ]
+
+      contract = run_actions(actions, contract, contract.state, contract.uco_balance)
+
+      IO.puts("#{System.monotonic_time(:millisecond) - start}ms calculate_rewards")
+      assert true
+    end
   end
 
   defp asserts_get_farm_infos(contract, actions, opts \\ []) do
@@ -1651,6 +1665,9 @@ defmodule VestingTest do
           :claim ->
             user_deposits
 
+          :calculate ->
+            user_deposits
+
           :withdraw ->
             Enum.map(user_deposits, fn d ->
               if d.deposit_id == payload.deposit_id do
@@ -1693,6 +1710,11 @@ defmodule VestingTest do
 
       trigger =
         case action do
+          :calculate ->
+            Trigger.new(payload.seed, index)
+            |> Trigger.timestamp(payload.datetime)
+            |> Trigger.named_action("calculate_rewards", %{})
+
           :deposit ->
             Trigger.new(payload.seed, index)
             |> Trigger.timestamp(timestamp)
