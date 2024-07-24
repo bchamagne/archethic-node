@@ -266,6 +266,15 @@ defmodule Archethic.Contracts.Interpreter.CommonInterpreter do
     {new_node, acc}
   end
 
+  def prewalk(_node = {{:atom, "monotonic"}, meta, []}, acc) do
+    new_node =
+      quote line: Keyword.fetch!(meta, :line) do
+        System.monotonic_time(:millisecond)
+      end
+
+    {new_node, acc}
+  end
+
   # throw
   def prewalk(node = {{:atom, "throw"}, _meta, [args]}, acc) when is_list(args) do
     args = Map.new(args)
@@ -483,7 +492,20 @@ defmodule Archethic.Contracts.Interpreter.CommonInterpreter do
 
     new_node =
       quote line: Keyword.fetch!(meta, :line) do
-        Decimal.compare(Decimal.new(unquote(lhs)), Decimal.new(unquote(rhs))) in unquote(results)
+        try do
+          start = System.monotonic_time(:microsecond)
+
+          (Decimal.compare(Decimal.new(unquote(lhs)), Decimal.new(unquote(rhs))) in unquote(
+             results
+           ))
+          |> tap(fn _ ->
+            Process.put(:cmp, Process.get(:cmp, 0) + System.monotonic_time(:microsecond) - start)
+          end)
+        rescue
+          _ ->
+            # strings
+            apply(Kernel, unquote(comp), [unquote(lhs), unquote(rhs)])
+        end
       end
 
     {new_node, acc}

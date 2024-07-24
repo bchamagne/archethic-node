@@ -1,5 +1,9 @@
 import Config
 
+config :stream_data,
+  max_runs: System.get_env("MAX_RUNS", "100") |> String.to_integer(),
+  max_shrinking_steps: 0
+
 # Print only errors during test
 config :logger, level: :error
 
