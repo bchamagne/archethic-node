@@ -86,7 +86,6 @@ defmodule InterpreterCase do
         },
         :time_now => trigger_constants["timestamp"],
         :functions => contract.functions,
-
         :state => contract.state
       })
 

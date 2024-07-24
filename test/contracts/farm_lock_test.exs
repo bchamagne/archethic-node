@@ -1383,18 +1383,43 @@ defmodule VestingTest do
 
   describe "Benchmark" do
     setup %{contract: contract} do
-      deposits =
-        deposits_generator(200, deposits_per_seed: 1)
-        |> Enum.take(1)
-        |> List.flatten()
+      state =
+        "/Users/bastien/Documents/archethic-node/test/contracts/state.json"
+        |> File.read!()
+        |> Jason.decode!(floats: :decimals)
 
-      contract = run_actions(deposits, contract, %{}, @initial_balance)
+      contract = run_actions([], contract, state, Decimal.new("87375.46577807"))
 
       %{contract: contract}
     end
 
     @tag :benchmark
-    test "Time to run 200 deposits" do
+    test "get_user_infos", %{contract: contract} do
+      start = System.monotonic_time(:millisecond)
+
+      call_function(
+        contract,
+        "get_user_infos",
+        ["0000B48A73C949BD7CC364188DD37DACF50498D81525EF98B38EC606617B43FFDCEC"],
+        ~U[2024-07-24T07:00:00Z]
+      )
+
+      IO.puts("#{System.monotonic_time(:millisecond) - start}ms get_user_infos")
+      assert true
+    end
+
+    @tag :benchmark
+    test "get_farm_infos", %{contract: contract} do
+      start = System.monotonic_time(:millisecond)
+
+      call_function(
+        contract,
+        "get_farm_infos",
+        [],
+        ~U[2024-07-24T07:00:00Z]
+      )
+
+      IO.puts("#{System.monotonic_time(:millisecond) - start}ms get_farm_infos")
       assert true
     end
   end
