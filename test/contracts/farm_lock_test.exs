@@ -737,13 +737,13 @@ defmodule VestingTest do
   } do
     check all(
             count <- StreamData.integer(1..10),
-            deposits <- deposits_generator(count, min_level: 5, max_level: 5),
+            deposits <- deposits_generator(count, max_level: 5),
             {:deposit, deposit} <- StreamData.member_of(deposits)
           ) do
       relock = %{
-        delay: deposit.delay + 1,
+        delay: deposit.delay + 365,
         seed: deposit.seed,
-        end_timestamp: @start_date |> DateTime.add(800 * @seconds_in_day) |> DateTime.to_unix(),
+        level: "6",
         deposit_id: deposit.deposit_id
       }
 
@@ -1335,7 +1335,7 @@ defmodule VestingTest do
             actions
             |> Enum.reduce(0, fn {_, %{delay: delay}}, acc -> max(delay, acc) end)
 
-          DateTime.add(@start_date, max_delay * @seconds_in_day, :second)
+          DateTime.add(@start_date, max_delay * @seconds_in_day)
 
         datetime ->
           datetime
@@ -1449,7 +1449,7 @@ defmodule VestingTest do
             actions
             |> Enum.reduce(0, fn {_, %{delay: delay}}, acc -> max(delay, acc) end)
 
-          DateTime.add(@start_date, max_delay * @seconds_in_day, :second)
+          DateTime.add(@start_date, max_delay * @seconds_in_day)
 
         datetime ->
           datetime
@@ -1536,21 +1536,18 @@ defmodule VestingTest do
           :deposit ->
             start_timestamp =
               @start_date
-              |> DateTime.add(payload.delay * @seconds_in_day, :second)
+              |> DateTime.add(payload.delay * @seconds_in_day)
+              |> DateTime.to_unix()
 
-            end_timestamp =
-              start_timestamp
-              |> DateTime.add(level_to_seconds(payload.level), :second)
+            start_timestamp = start_timestamp - rem(start_timestamp, @round_now_to)
+
+            end_timestamp = start_timestamp + level_to_seconds(payload.level)
 
             deposit = %{
               seed: payload.seed,
               amount: payload.amount,
-              start_timestamp:
-                start_timestamp
-                |> DateTime.to_unix(),
-              end_timestamp:
-                end_timestamp
-                |> DateTime.to_unix(),
+              start_timestamp: start_timestamp,
+              end_timestamp: end_timestamp,
               deposit_id: delay_to_id(payload.delay)
             }
 
@@ -1574,14 +1571,18 @@ defmodule VestingTest do
           :relock ->
             start_timestamp =
               @start_date
-              |> DateTime.add(payload.delay * @seconds_in_day, :second)
+              |> DateTime.add(payload.delay * @seconds_in_day)
               |> DateTime.to_unix()
+
+            start_timestamp = start_timestamp - rem(start_timestamp, @round_now_to)
+
+            end_timestamp = start_timestamp + level_to_seconds(payload.level)
 
             Enum.map(user_deposits, fn d ->
               if d.deposit_id == payload.deposit_id do
                 d
                 |> Map.put(:start_timestamp, start_timestamp)
-                |> Map.put(:end_timestamp, payload.end_timestamp)
+                |> Map.put(:end_timestamp, end_timestamp)
               else
                 d
               end
@@ -1600,7 +1601,7 @@ defmodule VestingTest do
       index = Map.get(index_acc, seed, 1)
       index_acc = Map.put(index_acc, seed, index + 1)
 
-      timestamp = @start_date |> DateTime.add(payload.delay * @seconds_in_day, :second)
+      timestamp = @start_date |> DateTime.add(payload.delay * @seconds_in_day)
 
       trigger =
         case action do
