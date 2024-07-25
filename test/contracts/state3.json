@@ -7752,14 +7752,16 @@
 
   "last_calculation_timestamp": 1721768160,
   "lp_tokens_deposited": 8.866,
-  "lp_tokens_deposited0": 8.866,
-  "lp_tokens_deposited1": 0,
-  "lp_tokens_deposited2": 0,
-  "lp_tokens_deposited3": 0,
-  "lp_tokens_deposited4": 0,
-  "lp_tokens_deposited5": 0,
-  "lp_tokens_deposited6": 0,
-  "lp_tokens_deposited7": 0,
+  "lp_tokens_deposited_by_level": {
+    "0": 8.866,
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "5": 0,
+    "6": 0,
+    "7": 0
+  },
   "rewards_distributed": 124.53958901,
   "rewards_reserved": 44855.8675129
 }

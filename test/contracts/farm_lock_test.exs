@@ -47,7 +47,7 @@ defmodule VestingTest do
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
+      |> Trigger.named_action("deposit", %{"level" => "flex"})
       |> Trigger.timestamp(@end_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -64,7 +64,7 @@ defmodule VestingTest do
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
+      |> Trigger.named_action("deposit", %{"level" => "flex"})
       |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("0.0000014"))
 
@@ -79,7 +79,7 @@ defmodule VestingTest do
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
+      |> Trigger.named_action("deposit", %{"level" => "flex"})
       |> Trigger.timestamp(@start_date)
 
     assert {:throw, 1003} =
@@ -95,7 +95,7 @@ defmodule VestingTest do
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
+      |> Trigger.named_action("deposit", %{"level" => "flex"})
       |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@invalid_address, 0, @farm_address, Decimal.new(100))
 
@@ -110,48 +110,28 @@ defmodule VestingTest do
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{
-        "end_timestamp" => @end_date |> DateTime.add(1) |> DateTime.to_unix()
-      })
+      |> Trigger.named_action("deposit", %{"level" => "7"})
       |> Trigger.timestamp(@start_date |> DateTime.add(366 * @seconds_in_day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(100))
 
-    assert {:throw, 1005} =
+    assert {:throw, 6002} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger)
   end
 
-  test "deposit/1 should throw when end_timestamp is in the past", %{contract: contract} do
+  test "deposit/1 should throw when level is max and there is more than 3 years remaining", %{
+    contract: contract
+  } do
     state = %{}
 
     trigger =
       Trigger.new()
-      |> Trigger.named_action("deposit", %{
-        "end_timestamp" => @start_date |> DateTime.to_unix()
-      })
-      |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
-      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(100))
-
-    assert {:throw, 1006} =
-             contract
-             |> prepare_contract(state)
-             |> trigger_contract(trigger)
-  end
-
-  test "deposit/1 should throw when lock is longer than 3 years", %{contract: contract} do
-    state = %{}
-
-    trigger =
-      Trigger.new()
-      |> Trigger.named_action("deposit", %{
-        "end_timestamp" =>
-          @start_date |> DateTime.add(3 * 365 * @seconds_in_day + 1) |> DateTime.to_unix()
-      })
+      |> Trigger.named_action("deposit", %{"level" => "max"})
       |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(100))
 
-    assert {:throw, 1007} =
+    assert {:throw, 6001} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger)
@@ -230,7 +210,7 @@ defmodule VestingTest do
 
     mock_genesis_address([trigger])
 
-    assert {:throw, 2000} =
+    assert {:throw, 6004} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger)
@@ -241,7 +221,7 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
+      |> Trigger.named_action("deposit", %{"level" => "flex"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -252,7 +232,7 @@ defmodule VestingTest do
 
     mock_genesis_address([trigger1, trigger2])
 
-    assert {:throw, 2000} =
+    assert {:throw, 6004} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger1)
@@ -264,17 +244,14 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{
-        "end_timestamp" =>
-          @start_date |> DateTime.add(7, :day) |> DateTime.to_unix() |> Integer.to_string()
-      })
+      |> Trigger.named_action("deposit", %{"level" => "1"})
       |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
     trigger2 =
       Trigger.new("seed", 2)
       |> Trigger.named_action("claim", %{"deposit_id" => delay_to_id(0)})
-      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+      |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
 
     mock_genesis_address([trigger1, trigger2])
 
@@ -285,21 +262,18 @@ defmodule VestingTest do
              |> trigger_contract(trigger2)
   end
 
-  test "claim/1 should not be allowed if reward_amount is 0", %{contract: contract} do
+  test "claim/1 should throw if reward_amount is 0", %{contract: contract} do
     state = %{}
 
     trigger0 =
       Trigger.new("seed2", 1)
-      |> Trigger.named_action("deposit", %{
-        "end_timestamp" =>
-          @start_date |> DateTime.add(365, :day) |> DateTime.to_unix() |> Integer.to_string()
-      })
-      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.named_action("deposit", %{"level" => "7"})
+      |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("999999999999"))
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
+      |> Trigger.named_action("deposit", %{"level" => "flex"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("0.00000143"))
 
@@ -310,7 +284,7 @@ defmodule VestingTest do
 
     mock_genesis_address([trigger0, trigger1, trigger2])
 
-    assert {:condition_failed, _} =
+    assert {:throw, 2003} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger0)
@@ -383,7 +357,7 @@ defmodule VestingTest do
 
     mock_genesis_address([trigger])
 
-    assert {:throw, 3000} =
+    assert {:throw, 6004} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger)
@@ -394,7 +368,7 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
+      |> Trigger.named_action("deposit", %{"level" => "flex"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -405,7 +379,7 @@ defmodule VestingTest do
 
     mock_genesis_address([trigger1, trigger2])
 
-    assert {:throw, 3000} =
+    assert {:throw, 6004} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger1)
@@ -417,7 +391,7 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{"end_timestamp" => "flex"})
+      |> Trigger.named_action("deposit", %{"level" => "flex"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -428,7 +402,7 @@ defmodule VestingTest do
 
     mock_genesis_address([trigger1, trigger2])
 
-    assert {:throw, 3003} =
+    assert {:throw, 3001} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger1)
@@ -440,13 +414,7 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{
-        "end_timestamp" =>
-          @start_date
-          |> DateTime.add(7 * @seconds_in_day)
-          |> DateTime.to_unix()
-          |> Integer.to_string()
-      })
+      |> Trigger.named_action("deposit", %{"level" => "1"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -457,7 +425,7 @@ defmodule VestingTest do
 
     mock_genesis_address([trigger1, trigger2])
 
-    assert {:throw, 3004} =
+    assert {:throw, 3002} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger1)
@@ -620,14 +588,14 @@ defmodule VestingTest do
     trigger =
       Trigger.new("seed", 1)
       |> Trigger.named_action("relock", %{
-        "end_timestamp" => @start_date |> DateTime.add(1 * @seconds_in_day) |> DateTime.to_unix(),
+        "level" => "1",
         "deposit_id" => "xx"
       })
       |> Trigger.timestamp(@start_date |> DateTime.add(2))
 
     mock_genesis_address([trigger])
 
-    assert {:throw, 4000} =
+    assert {:throw, 6004} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger)
@@ -638,23 +606,18 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{
-        "end_timestamp" => DateTime.to_unix(@start_date |> DateTime.add(1))
-      })
-      |> Trigger.timestamp(@start_date |> DateTime.add(1))
+      |> Trigger.named_action("deposit", %{"level" => "flex"})
+      |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
     trigger2 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("relock", %{
-        "end_timestamp" => @start_date |> DateTime.add(1 * @seconds_in_day) |> DateTime.to_unix(),
-        "deposit_id" => "xx"
-      })
-      |> Trigger.timestamp(@start_date |> DateTime.add(2))
+      |> Trigger.named_action("relock", %{"level" => "1", "deposit_id" => "xx"})
+      |> Trigger.timestamp(@start_date |> DateTime.add(2 * @seconds_in_day))
 
     mock_genesis_address([trigger1, trigger2])
 
-    assert {:throw, 4000} =
+    assert {:throw, 6004} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger1)
@@ -666,23 +629,21 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{
-        "end_timestamp" => @start_date |> DateTime.add(1 * @seconds_in_day) |> DateTime.to_unix()
-      })
-      |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
+      |> Trigger.named_action("deposit", %{"level" => "flex"})
+      |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
     trigger2 =
       Trigger.new("seed", 1)
       |> Trigger.named_action("relock", %{
-        "end_timestamp" => "max",
-        "deposit_id" => delay_to_id(1)
+        "level" => "1",
+        "deposit_id" => delay_to_id(0)
       })
       |> Trigger.timestamp(@end_date |> DateTime.add(1))
 
     mock_genesis_address([trigger1, trigger2])
 
-    assert {:throw, 4002} =
+    assert {:throw, 4001} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger1)
@@ -694,54 +655,21 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{
-        "end_timestamp" =>
-          @start_date |> DateTime.add(370 * @seconds_in_day) |> DateTime.to_unix()
-      })
-      |> Trigger.timestamp(@start_date |> DateTime.add(366 * @seconds_in_day))
+      |> Trigger.named_action("deposit", %{"level" => "flex"})
+      |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
     trigger2 =
       Trigger.new("seed", 1)
       |> Trigger.named_action("relock", %{
-        "end_timestamp" => @end_date |> DateTime.add(1) |> DateTime.to_unix(),
-        "deposit_id" => delay_to_id(366)
+        "level" => "7",
+        "deposit_id" => delay_to_id(0)
       })
       |> Trigger.timestamp(@start_date |> DateTime.add(367 * @seconds_in_day))
 
     mock_genesis_address([trigger1, trigger2])
 
-    assert {:throw, 4003} =
-             contract
-             |> prepare_contract(state)
-             |> trigger_contract(trigger1)
-             |> trigger_contract(trigger2)
-  end
-
-  test "relock/2 should throw if end_timestamp is before previous deposit's end", %{
-    contract: contract
-  } do
-    state = %{}
-
-    trigger1 =
-      Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{
-        "end_timestamp" => @start_date |> DateTime.add(10 * @seconds_in_day) |> DateTime.to_unix()
-      })
-      |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
-      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
-
-    trigger2 =
-      Trigger.new("seed", 1)
-      |> Trigger.named_action("relock", %{
-        "end_timestamp" => @start_date |> DateTime.add(1 * @seconds_in_day) |> DateTime.to_unix(),
-        "deposit_id" => delay_to_id(1)
-      })
-      |> Trigger.timestamp(@start_date |> DateTime.add(2 * @seconds_in_day))
-
-    mock_genesis_address([trigger1, trigger2])
-
-    assert {:throw, 4004} =
+    assert {:throw, 6002} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger1)
@@ -755,25 +683,21 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{
-        "end_timestamp" =>
-          @start_date |> DateTime.add(370 * @seconds_in_day) |> DateTime.to_unix()
-      })
+      |> Trigger.named_action("deposit", %{"level" => "5"})
       |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
     trigger2 =
       Trigger.new("seed", 1)
       |> Trigger.named_action("relock", %{
-        "end_timestamp" =>
-          @start_date |> DateTime.add(375 * @seconds_in_day) |> DateTime.to_unix(),
+        "level" => "5",
         "deposit_id" => delay_to_id(0)
       })
       |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
 
     mock_genesis_address([trigger1, trigger2])
 
-    assert {:throw, 4004} =
+    assert {:throw, 4003} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger1)
@@ -787,54 +711,21 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{
-        "end_timestamp" =>
-          @start_date |> DateTime.add(370 * @seconds_in_day) |> DateTime.to_unix()
-      })
+      |> Trigger.named_action("deposit", %{"level" => "5"})
       |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
     trigger2 =
       Trigger.new("seed", 1)
       |> Trigger.named_action("relock", %{
-        "end_timestamp" =>
-          @start_date |> DateTime.add(50 * @seconds_in_day) |> DateTime.to_unix(),
+        "level" => "4",
         "deposit_id" => delay_to_id(0)
       })
       |> Trigger.timestamp(@start_date |> DateTime.add(1))
 
     mock_genesis_address([trigger1, trigger2])
 
-    assert {:throw, 4004} =
-             contract
-             |> prepare_contract(state)
-             |> trigger_contract(trigger1)
-             |> trigger_contract(trigger2)
-  end
-
-  test "relock/2 should throw when lock is longer than 3 years", %{contract: contract} do
-    state = %{}
-
-    trigger1 =
-      Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{
-        "end_timestamp" => @start_date |> DateTime.add(10 * @seconds_in_day) |> DateTime.to_unix()
-      })
-      |> Trigger.timestamp(@start_date)
-      |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
-
-    trigger2 =
-      Trigger.new("seed", 2)
-      |> Trigger.named_action("relock", %{
-        "end_timestamp" =>
-          @start_date |> DateTime.add(3 * 365 * @seconds_in_day + 1) |> DateTime.to_unix(),
-        "deposit_id" => delay_to_id(0)
-      })
-      |> Trigger.timestamp(@start_date)
-
-    mock_genesis_address([trigger1, trigger2])
-
-    assert {:throw, 4007} =
+    assert {:throw, 4003} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger1)
@@ -884,7 +775,7 @@ defmodule VestingTest do
       |> Trigger.named_action("calculate_rewards", %{})
       |> Trigger.timestamp(@start_date |> DateTime.add(-1))
 
-    assert {:throw, 5000} =
+    assert {:throw, 5001} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger)
@@ -898,7 +789,7 @@ defmodule VestingTest do
       |> Trigger.named_action("calculate_rewards", %{})
       |> Trigger.timestamp(@end_date |> DateTime.add(1 * @seconds_in_day))
 
-    assert {:throw, 5001} =
+    assert {:throw, 5002} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger)
@@ -909,17 +800,13 @@ defmodule VestingTest do
 
     trigger1 =
       Trigger.new("seed", 1)
-      |> Trigger.named_action("deposit", %{
-        "end_timestamp" => @start_date |> DateTime.add(10 * @seconds_in_day) |> DateTime.to_unix()
-      })
+      |> Trigger.named_action("deposit", %{"level" => "1"})
       |> Trigger.timestamp(@start_date)
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
     trigger2 =
       Trigger.new("seed2", 1)
-      |> Trigger.named_action("deposit", %{
-        "end_timestamp" => @start_date |> DateTime.add(10 * @seconds_in_day) |> DateTime.to_unix()
-      })
+      |> Trigger.named_action("deposit", %{"level" => "1"})
       |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
@@ -930,7 +817,7 @@ defmodule VestingTest do
 
     mock_genesis_address([trigger1, trigger2, trigger3])
 
-    assert {:throw, 5002} =
+    assert {:throw, 5003} =
              contract
              |> prepare_contract(state)
              |> trigger_contract(trigger1)

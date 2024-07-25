@@ -4,7 +4,7 @@ defmodule FarmLock3Test do
 
   import InterpreterCase
 
-  @code File.read!("/Users/bastien/Documents/archethic-node/test/contracts/farm_lock3.exs")
+  @code File.read!("/Users/bastien/Documents/archethic-dex/contracts/contracts/farm_lock.exs")
   @lp_token_address "00000000000000000000000000000000000000000000000000000000000000000001"
   @factory_address "00000000000000000000000000000000000000000000000000000000000000000002"
   @router_address "00000000000000000000000000000000000000000000000000000000000000000003"
@@ -59,7 +59,7 @@ defmodule FarmLock3Test do
       start = System.monotonic_time(:millisecond)
 
       actions = [
-        {:calculate, %{datetime: ~U[2024-07-23T21:00:00Z], delay: 9999, seed: "bastien"}}
+        {:calculate, %{datetime: ~U[2024-07-23T20:57:00Z], delay: 9999, seed: "bastien"}}
       ]
 
       contract = run_actions(actions, contract, contract.state, contract.uco_balance)
