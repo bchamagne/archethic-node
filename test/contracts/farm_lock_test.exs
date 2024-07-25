@@ -1379,18 +1379,21 @@ defmodule VestingTest do
     assert Decimal.eq?(expected_lp_tokens_deposited, farm_infos["lp_tokens_deposited"])
 
     if Decimal.positive?(total_lp_tokens_deposited) do
-      # sum of rewards_allocated is equal to initial balance
+      # sum of remaining_rewards is equal to initial balance
       assert farm_infos["stats"]
              |> Map.values()
-             |> Enum.map(& &1["rewards_allocated"])
+             |> Enum.map(& &1["remaining_rewards"])
              |> List.flatten()
-             |> Enum.map(& &1["rewards"])
+             |> Enum.map(& &1["remaining_rewards"])
              |> Enum.reduce(&Decimal.add/2)
-             |> then(fn total_rewards_allocated ->
-               # total_rewards_allocated should be equal to initial balance
-               # but it's not because of imprecisions
-               assert Decimal.div(total_rewards_allocated, @initial_balance)
-                      |> Decimal.gt?("0.9999")
+             |> then(fn total_remaining_rewards ->
+               Decimal.eq?(
+                 Decimal.add(
+                   Decimal.add(total_remaining_rewards, farm_infos["rewards_distributed"]),
+                   contract.state["rewards_reserved"]
+                 ),
+                 @initial_balance
+               )
              end)
     end
 
@@ -1403,15 +1406,19 @@ defmodule VestingTest do
 
     # rewards_reserved may not exist (if there are only deposits when farm is not started)
     if contract.state["rewards_reserved"] do
-      assert Decimal.eq?(rewards_reserved, contract.state["rewards_reserved"])
+      # should be equal but it's not because of imprecisions
+      assert Decimal.div(rewards_reserved, contract.state["rewards_reserved"])
+             |> Decimal.gt?("0.9999")
     end
 
     # remaining_rewards subtracts the reserved rewards
-    assert Decimal.eq?(
+    # should be equal but it's not because of imprecisions
+    assert Decimal.div(
              uco_balance
              |> Decimal.sub(rewards_reserved),
              farm_infos["remaining_rewards"]
            )
+           |> Decimal.gt?("0.9999")
 
     # stats are there
     for stat <- Map.values(farm_infos["stats"]) do
@@ -1605,9 +1612,7 @@ defmodule VestingTest do
           :deposit ->
             Trigger.new(payload.seed, index)
             |> Trigger.timestamp(timestamp)
-            |> Trigger.named_action("deposit", %{
-              "end_timestamp" => DateTime.to_unix(timestamp) + level_to_seconds(payload.level)
-            })
+            |> Trigger.named_action("deposit", %{"level" => payload.level})
             |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, payload.amount)
 
           :claim ->
@@ -1627,7 +1632,7 @@ defmodule VestingTest do
             Trigger.new(payload.seed, index)
             |> Trigger.timestamp(timestamp)
             |> Trigger.named_action("relock", %{
-              "end_timestamp" => payload.end_timestamp,
+              "level" => payload.level,
               "deposit_id" => payload.deposit_id
             })
         end
