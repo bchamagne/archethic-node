@@ -782,7 +782,10 @@ defmodule VestingTest do
   end
 
   test "calculate_rewards/0 should throw if farm has ended", %{contract: contract} do
-    state = %{}
+    state = %{
+      "last_calculation_timestamp" =>
+        @end_date |> DateTime.add(1 * @seconds_in_day) |> DateTime.to_unix()
+    }
 
     trigger =
       Trigger.new("seed", 1)
