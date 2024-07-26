@@ -279,12 +279,12 @@ defmodule Archethic.Contracts.Interpreter.ASTHelper do
       end
 
     operation.(lhs, rhs)
-    |> decimal_round()
+    # |> decimal_round()
     |> Utils.maybe_decimal_to_integer()
   end
 
-  defp decimal_round(dec_num) do
-    # Round only if number is not integer, otherwise there is some inconsisties with 0 or -0
-    if Decimal.integer?(dec_num), do: dec_num, else: Decimal.round(dec_num, 8, :floor)
-  end
+  # defp decimal_round(dec_num) do
+  #   # Round only if number is not integer, otherwise there is some inconsisties with 0 or -0
+  #   if Decimal.integer?(dec_num), do: dec_num, else: Decimal.round(dec_num, 8, :floor)
+  # end
 end

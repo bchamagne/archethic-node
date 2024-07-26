@@ -110,7 +110,10 @@ defmodule Archethic.Contracts.Interpreter.Library.Common.Contract do
   def add_uco_transfer(next_tx, args) do
     args =
       Map.update!(args, "amount", fn amount ->
-        Decimal.new(amount) |> Decimal.mult(100_000_000) |> Decimal.to_integer()
+        Decimal.new(amount)
+        |> Decimal.mult(100_000_000)
+        |> Decimal.round(0, :floor)
+        |> Decimal.to_integer()
       end)
 
     TransactionStatements.add_uco_transfer(next_tx, Map.to_list(args))
