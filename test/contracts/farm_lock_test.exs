@@ -937,6 +937,27 @@ defmodule VestingTest do
 
   describe "scenarios" do
     @tag :scenario
+    test "when no deposit for a period, the rewards missed are distributed in the remaining year time",
+         %{contract: contract} do
+      actions = [
+        {:deposit,
+         %{date: n_ticks_from_start(1), seed: "seed", level: "5", amount: Decimal.new(1000)}},
+        {:calculate, %{date: n_ticks_from_start(2)}}
+      ]
+
+      result_contract = run_actions(actions, contract, %{}, @initial_balance)
+
+      # d = (1/(365*24)) * 45_000_000 = 5136.986301369863
+      # seed = d + d/(365*24) = 5137.572715331206
+      asserts_get_user_infos(result_contract, "seed", actions,
+        assert_fn: fn user_infos ->
+          assert 1 == length(user_infos)
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "5137.572782281081")
+        end
+      )
+    end
+
+    @tag :scenario
     test "a single deposit should generate rewards", %{contract: contract} do
       actions = [
         {:deposit,
