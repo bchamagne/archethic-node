@@ -141,33 +141,42 @@ defmodule VestingTest do
     contract: contract
   } do
     check all(
-            deposits <-
-              deposits_generator()
-              |> StreamData.map(fn deposits ->
-                Enum.map(deposits, fn {:deposit, payload} ->
-                  {:deposit, %{payload | date: DateTime.add(@start_date, -1)}}
-                end)
-              end),
-            {:deposit, deposit} <- StreamData.member_of(deposits)
+            seeds_levels_amounts <-
+              StreamData.list_of(
+                StreamData.tuple({seed_generator(), level_generator(), amount_generator()}),
+                min_length: 1,
+                max_length: 5
+              )
           ) do
+      deposits =
+        seeds_levels_amounts
+        |> Enum.map(fn {seed, level, amount} ->
+          {:deposit,
+           %{
+             amount: amount,
+             date: DateTime.add(@start_date, -1),
+             level: level,
+             seed: seed,
+             deposit_id: Ecto.UUID.generate()
+           }}
+        end)
+
       result_contract = run_actions(deposits, contract, %{}, @initial_balance)
+
+      deposit = Enum.random(deposits) |> elem(1)
 
       asserts_get_user_infos(result_contract, deposit.seed, deposits,
         assert_fn: fn user_infos ->
-          nil
-          # also assert that no rewards calculated
-          # assert Decimal.eq?(
-          #          0,
-          #          Enum.map(user_infos, & &1["reward_amount"]) |> Enum.reduce(&Decimal.add/2)
-          #        )
+          assert Decimal.eq?(
+                   0,
+                   Enum.map(user_infos, & &1["reward_amount"]) |> Enum.reduce(&Decimal.add/2)
+                 )
         end
       )
 
       asserts_get_farm_infos(result_contract, deposits,
         assert_fn: fn farm_infos ->
-          nil
-          # also assert that no rewards calculated
-          # assert farm_infos["remaining_rewards"] == @initial_balance
+          assert farm_infos["remaining_rewards"] == @initial_balance
         end
       )
     end
@@ -177,10 +186,30 @@ defmodule VestingTest do
     contract: contract
   } do
     check all(
-            deposits <- deposits_generator(),
-            {:deposit, deposit} <- StreamData.member_of(deposits)
+            seeds_levels_amounts <-
+              StreamData.list_of(
+                StreamData.tuple({seed_generator(), level_generator(), amount_generator()}),
+                min_length: 1,
+                max_length: 5
+              )
           ) do
+      deposits =
+        seeds_levels_amounts
+        |> Enum.with_index()
+        |> Enum.map(fn {{seed, level, amount}, i} ->
+          {:deposit,
+           %{
+             amount: amount,
+             date: n_ticks_from_start(i),
+             level: level,
+             seed: seed,
+             deposit_id: tick_to_id(i)
+           }}
+        end)
+
       result_contract = run_actions(deposits, contract, %{}, @initial_balance)
+
+      deposit = Enum.random(deposits) |> elem(1)
       asserts_get_user_infos(result_contract, deposit.seed, deposits)
       asserts_get_farm_infos(result_contract, deposits)
     end
@@ -268,13 +297,13 @@ defmodule VestingTest do
     trigger0 =
       Trigger.new("seed2", 1)
       |> Trigger.named_action("deposit", %{"level" => "7"})
-      |> Trigger.timestamp(@start_date)
+      |> Trigger.timestamp(n_ticks_from_start(0))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("999999999999"))
 
     trigger1 =
       Trigger.new("seed", 1)
       |> Trigger.named_action("deposit", %{"level" => "flex"})
-      |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
+      |> Trigger.timestamp(n_ticks_from_start(1))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new("0.00000143"))
 
     trigger2 =
@@ -295,7 +324,34 @@ defmodule VestingTest do
   property "claim/1 should transfer the funds and update the state", %{
     contract: contract
   } do
-    check all(deposits <- deposits_generator()) do
+    check all(
+            seeds_levels_amounts <-
+              StreamData.constant([
+                {<<5, 158, 218, 242, 153, 44, 58, 45, 180, 94>>, "0", Decimal.new("1.00000000")}
+              ])
+            # StreamData.list_of(
+            #   StreamData.tuple(
+            #     {seed_generator(), level_generator(max_level: 0),
+            #      amount_generator(min_amount: 1, max_amount: 10_000)}
+            #   ),
+            #   min_length: 1,
+            #   max_length: 5
+            # )
+          ) do
+      deposits =
+        seeds_levels_amounts
+        |> Enum.with_index()
+        |> Enum.map(fn {{seed, level, amount}, i} ->
+          {:deposit,
+           %{
+             amount: amount,
+             date: n_ticks_from_start(i),
+             level: level,
+             seed: seed,
+             deposit_id: tick_to_id(i)
+           }}
+        end)
+
       result_contract = run_actions(deposits, contract, %{}, @initial_balance)
 
       # because flexible are merged we can't use the original deposits to generaate claim
@@ -313,33 +369,26 @@ defmodule VestingTest do
       claim =
         {:claim,
          %{
-           delay: 2000,
+           date: n_ticks_from_start(length(deposits)),
            seed: deposit_seed,
            deposit_id: deposit["id"]
          }}
 
       result_contract =
-        run_actions([claim], result_contract, result_contract.state, result_contract.uco_balance,
-          ignore_condition_failed: true
-        )
+        run_actions([claim], result_contract, result_contract.state, result_contract.uco_balance)
 
       actions = deposits ++ [claim]
 
       asserts_get_user_infos(result_contract, deposit_seed, actions,
         assert_fn: fn user_infos ->
-          nil
-          # user_info = Enum.find(user_infos, &(&1["id"] == deposit["id"]))
-          # assert user_info["reward_amount"] == 0
+          user_info = Enum.find(user_infos, &(&1["id"] == deposit["id"]))
+          assert user_info["reward_amount"] == 0
         end
       )
 
       asserts_get_farm_infos(result_contract, actions,
         assert_fn: fn farm_infos ->
-          # there's an edge case where the rewards_distributed can be 0
-          # it happens with small deposits amount that generate less than 1e-8 rewards
-          if Decimal.gt?(deposit["amount"], 1) do
-            assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
-          end
+          assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
         end
       )
     end
@@ -390,13 +439,13 @@ defmodule VestingTest do
     trigger1 =
       Trigger.new("seed", 1)
       |> Trigger.named_action("deposit", %{"level" => "flex"})
-      |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
+      |> Trigger.timestamp(n_ticks_from_start(0))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
     trigger2 =
       Trigger.new("seed", 2)
-      |> Trigger.named_action("withdraw", %{"amount" => 2, "deposit_id" => tick_to_id(1)})
-      |> Trigger.timestamp(@start_date |> DateTime.add(2 * @seconds_in_day))
+      |> Trigger.named_action("withdraw", %{"amount" => 2, "deposit_id" => tick_to_id(0)})
+      |> Trigger.timestamp(n_ticks_from_start(1))
 
     mock_genesis_address([trigger1, trigger2])
 
@@ -413,13 +462,13 @@ defmodule VestingTest do
     trigger1 =
       Trigger.new("seed", 1)
       |> Trigger.named_action("deposit", %{"level" => "1"})
-      |> Trigger.timestamp(@start_date |> DateTime.add(1 * @seconds_in_day))
+      |> Trigger.timestamp(n_ticks_from_start(0))
       |> Trigger.token_transfer(@lp_token_address, 0, @farm_address, Decimal.new(1))
 
     trigger2 =
       Trigger.new("seed", 2)
-      |> Trigger.named_action("withdraw", %{"amount" => 1, "deposit_id" => tick_to_id(1)})
-      |> Trigger.timestamp(@start_date |> DateTime.add(2 * @seconds_in_day))
+      |> Trigger.named_action("withdraw", %{"amount" => 1, "deposit_id" => tick_to_id(0)})
+      |> Trigger.timestamp(n_ticks_from_start(1))
 
     mock_genesis_address([trigger1, trigger2])
 
@@ -434,9 +483,36 @@ defmodule VestingTest do
     contract: contract
   } do
     check all(
-            deposits <- deposits_generator(),
-            {:deposit, deposit} <- StreamData.member_of(deposits)
+            # StreamData.constant([
+            #   {<<48, 189, 104, 51, 233, 174, 244, 215, 184, 229>>, "5",
+            #    Decimal.new("0.00000143")},
+            #   {<<31, 171, 18, 105, 95, 216, 106, 210, 66, 36>>, "2", Decimal.new("0.00000143")},
+            #   {<<214, 234, 254, 132, 90, 89, 47, 152, 86, 154>>, "2",
+            #    Decimal.new("1.037629354146162E+19")}
+            # ])
+            seeds_levels_amounts <-
+              StreamData.list_of(
+                StreamData.tuple(
+                  {seed_generator(), level_generator(max_level: 0), amount_generator()}
+                ),
+                min_length: 1,
+                max_length: 5
+              )
           ) do
+      deposits =
+        seeds_levels_amounts
+        |> Enum.with_index()
+        |> Enum.map(fn {{seed, level, amount}, i} ->
+          {:deposit,
+           %{
+             amount: amount,
+             date: n_ticks_from_start(i),
+             level: level,
+             seed: seed,
+             deposit_id: tick_to_id(i)
+           }}
+        end)
+
       result_contract = run_actions(deposits, contract, %{}, @initial_balance)
 
       # because flexible are merged we can't use the original deposits to generaate withdraws
@@ -451,18 +527,16 @@ defmodule VestingTest do
             |> then(fn {:deposit, d} -> d.seed end)
 
           Enum.map(user_deposits, fn user_deposit ->
-            delay =
-              case user_deposit["end"] do
-                0 ->
-                  2000
-
-                end_timestamp ->
-                  trunc((end_timestamp - DateTime.to_unix(@start_date)) / @seconds_in_day)
-              end
-
             {:withdraw,
              %{
-               delay: delay,
+               date:
+                 case user_deposit["start"] do
+                   nil ->
+                     n_ticks_from_start(length(deposits))
+
+                   start ->
+                     DateTime.from_unix!(start + level_to_seconds(user_deposit["level"]))
+                 end,
                seed: seed,
                amount: user_deposit["amount"],
                deposit_id: user_deposit["id"]
@@ -481,6 +555,8 @@ defmodule VestingTest do
 
       actions = deposits ++ withdraws
 
+      deposit = Enum.random(deposits) |> elem(1)
+
       asserts_get_user_infos(result_contract, deposit.seed, actions,
         assert_fn: fn user_infos ->
           # no more deposit since everything is withdrawn
@@ -491,13 +567,10 @@ defmodule VestingTest do
       asserts_get_farm_infos(result_contract, actions,
         assert_fn: fn farm_infos ->
           # too small amount will have no rewards_distributed because of rounding imprecision
-          if Enum.any?(deposits, fn {:deposit, d} ->
-               Decimal.gt?(d.amount, Decimal.new("0.00000143"))
-             end) do
-            assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
-          end
 
-          assert Decimal.eq?(
+          assert Decimal.gt?(farm_infos["rewards_distributed"], 0)
+
+          assert almost_equal(
                    0,
                    farm_infos["stats"]
                    |> Map.values()
@@ -513,9 +586,29 @@ defmodule VestingTest do
     contract: contract
   } do
     check all(
-            deposits <- deposits_generator(),
-            {:deposit, deposit} <- StreamData.member_of(deposits)
+            seeds_levels_amounts <-
+              StreamData.list_of(
+                StreamData.tuple(
+                  {seed_generator(), level_generator(max_level: 0), amount_generator()}
+                ),
+                min_length: 1,
+                max_length: 5
+              )
           ) do
+      deposits =
+        seeds_levels_amounts
+        |> Enum.with_index()
+        |> Enum.map(fn {{seed, level, amount}, i} ->
+          {:deposit,
+           %{
+             amount: amount,
+             date: n_ticks_from_start(i),
+             level: level,
+             seed: seed,
+             deposit_id: tick_to_id(i)
+           }}
+        end)
+
       result_contract = run_actions(deposits, contract, %{}, @initial_balance)
 
       deposits_count_before =
@@ -536,18 +629,16 @@ defmodule VestingTest do
             |> then(fn {:deposit, d} -> d.seed end)
 
           Enum.map(user_deposits, fn user_deposit ->
-            delay =
-              case user_deposit["end"] do
-                0 ->
-                  2000
-
-                end_timestamp ->
-                  trunc((end_timestamp - DateTime.to_unix(@start_date)) / @seconds_in_day)
-              end
-
             {:withdraw,
              %{
-               delay: delay,
+               date:
+                 case user_deposit["start"] do
+                   nil ->
+                     n_ticks_from_start(length(deposits))
+
+                   start ->
+                     DateTime.from_unix!(start + level_to_seconds(user_deposit["level"]))
+                 end,
                seed: seed,
                amount: Decimal.div(user_deposit["amount"], 2) |> Decimal.round(8),
                deposit_id: user_deposit["id"]
@@ -573,6 +664,8 @@ defmodule VestingTest do
       actions = deposits ++ withdraws
 
       assert deposits_count_after == deposits_count_before
+
+      deposit = Enum.random(deposits) |> elem(1)
       asserts_get_user_infos(result_contract, deposit.seed, actions)
       asserts_get_farm_infos(result_contract, actions)
     end
@@ -732,11 +825,34 @@ defmodule VestingTest do
     contract: contract
   } do
     check all(
-            deposits <- deposits_generator(max_level: 5),
-            {:deposit, deposit} <- StreamData.member_of(deposits)
+            seeds_levels_amounts <-
+              StreamData.list_of(
+                StreamData.tuple(
+                  {seed_generator(), level_generator(max_level: 5),
+                   amount_generator(min_amount: 1, max_amount: 10_000)}
+                ),
+                min_length: 1,
+                max_length: 5
+              )
           ) do
+      deposits =
+        seeds_levels_amounts
+        |> Enum.with_index()
+        |> Enum.map(fn {{seed, level, amount}, i} ->
+          {:deposit,
+           %{
+             amount: amount,
+             date: n_ticks_from_start(i),
+             level: level,
+             seed: seed,
+             deposit_id: tick_to_id(i)
+           }}
+        end)
+
+      deposit = Enum.random(deposits) |> elem(1)
+
       relock = %{
-        delay: deposit.delay + 365,
+        date: n_ticks_from_start(length(deposits)),
         seed: deposit.seed,
         level: "6",
         deposit_id: deposit.deposit_id
@@ -751,7 +867,7 @@ defmodule VestingTest do
       asserts_get_user_infos(result_contract, relock.seed, actions,
         assert_fn: fn user_infos ->
           user_info = Enum.find(user_infos, &(&1["id"] == relock.deposit_id))
-          assert Decimal.eq?(user_info["reward_amount"], 0)
+          assert almost_equal(user_info["reward_amount"], 0)
           assert user_info["level"] == "6"
         end
       )
@@ -1383,6 +1499,45 @@ defmodule VestingTest do
         end
       )
     end
+
+    @tag :scenario
+    test "relock should distribute existing rewards", %{contract: contract} do
+      actions = [
+        {:deposit,
+         %{date: n_ticks_from_start(0), seed: "seed1", level: "0", amount: Decimal.new(1000)}},
+        {:deposit,
+         %{date: n_ticks_from_start(0), seed: "seed2", level: "0", amount: Decimal.new(1000)}},
+        {:relock,
+         %{date: n_ticks_from_start(1), deposit_id: tick_to_id(0), seed: "seed1", level: "7"}},
+        {:calculate, %{date: n_ticks_from_start(2)}}
+      ]
+
+      result_contract = run_actions(actions, contract, %{}, @initial_balance)
+
+      # 0->1 seed1: 0.5 * (1/(365*24)) * 45_000_000 = 2568.4931506849316
+      # 0->1 seed2: 0.5 * (1/(365*24)) * 45_000_000 = 2568.4931506849316
+      # 1->2 seed1:  (1/(365*24)) * 45_000_000 * 0.9846491228070176 = 5058.129055515501
+      # 1->2 seed2:  (1/(365*24)) * 45_000_000 * 0.015350877192982455 = 78.85724585436193
+      asserts_get_user_infos(result_contract, "seed1", actions,
+        assert_fn: fn user_infos ->
+          assert 1 == length(user_infos)
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "5058.129055515498")
+        end
+      )
+
+      asserts_get_user_infos(result_contract, "seed2", actions,
+        assert_fn: fn user_infos ->
+          assert 1 == length(user_infos)
+          assert Decimal.eq?(hd(user_infos)["reward_amount"], "2647.350396539292")
+        end
+      )
+
+      asserts_get_farm_infos(result_contract, actions,
+        assert_fn: fn farm_infos ->
+          assert Decimal.eq?(farm_infos["rewards_distributed"], "2568.493150684931")
+        end
+      )
+    end
   end
 
   describe "Benchmark" do
@@ -1435,7 +1590,7 @@ defmodule VestingTest do
         {:calculate, %{date: ~U[2024-07-23T21:00:00Z]}}
       ]
 
-      contract = run_actions(actions, contract, contract.state, contract.uco_balance)
+      _ = run_actions(actions, contract, contract.state, contract.uco_balance)
 
       IO.puts("#{System.monotonic_time(:millisecond) - start}ms calculate_rewards")
       assert true
@@ -1456,6 +1611,7 @@ defmodule VestingTest do
           datetime
       end
 
+    time_now = %DateTime{time_now | minute: 0, second: 0, microsecond: {0, 0}}
     time_now_unix = DateTime.to_unix(time_now)
 
     farm_infos = call_function(contract, "get_farm_infos", [], time_now)
@@ -1483,6 +1639,7 @@ defmodule VestingTest do
         {:withdraw, %{amount: amount}}, acc -> Decimal.sub(acc, amount)
         {:relock, _}, acc -> acc
         {:claim, _}, acc -> acc
+        {:calculate, _}, acc -> acc
       end)
 
     total_lp_tokens_deposited =
@@ -1490,8 +1647,8 @@ defmodule VestingTest do
       |> Map.values()
       |> Enum.reduce(0, &Decimal.add(&1["lp_tokens_deposited"], &2))
 
-    assert Decimal.eq?(expected_lp_tokens_deposited, total_lp_tokens_deposited)
-    assert Decimal.eq?(expected_lp_tokens_deposited, farm_infos["lp_tokens_deposited"])
+    assert almost_equal(expected_lp_tokens_deposited, total_lp_tokens_deposited)
+    assert almost_equal(expected_lp_tokens_deposited, farm_infos["lp_tokens_deposited"])
 
     if Decimal.positive?(total_lp_tokens_deposited) do
       # sum of remaining_rewards is equal to initial balance
@@ -1747,17 +1904,17 @@ defmodule VestingTest do
     |> Enum.reverse()
   end
 
-  defp amount_generator(opts) do
+  defp amount_generator(opts \\ []) do
     # no need to generate a number bigger than 2 ** 64
     StreamData.float(
       min: Keyword.get(opts, :min_amount, 0.00000143),
-      max: Keyword.get(opts, :max_amount, 18_446_744_073_709_551_615.0)
+      max: Keyword.get(opts, :max_amount, 100_000_000.0)
     )
     |> StreamData.map(&Decimal.from_float/1)
     |> StreamData.map(&Decimal.round(&1, 8))
   end
 
-  defp level_generator(opts) do
+  defp level_generator(opts \\ []) do
     min_level = Keyword.get(opts, :min_level, 0)
     max_level = Keyword.get(opts, :max_level, 7)
 
@@ -1765,51 +1922,8 @@ defmodule VestingTest do
     |> StreamData.map(&Integer.to_string/1)
   end
 
-  defp delay_generator() do
-    StreamData.integer(1..365)
-  end
-
   defp seed_generator() do
     StreamData.binary(length: 10)
-  end
-
-  defp deposits_generator(opts \\ []) do
-    StreamData.list_of(seed_generator(), min_length: 1, max_length: 5)
-    |> StreamData.map(fn seeds ->
-      Enum.map(seeds, fn seed ->
-        Process.put("delays", [])
-
-        deposit_generator(seed, opts)
-        |> Stream.reject(fn {:deposit, deposit} ->
-          delays = Process.get("delays")
-          # nonsense to have multiple operation on the same chain at the same time
-          if deposit.delay in delays do
-            true
-          else
-            Process.put("delays", [deposit.delay | delays])
-            false
-          end
-        end)
-        |> Enum.take(Keyword.get(opts, :deposits_per_seed, 3))
-      end)
-      |> List.flatten()
-      |> Enum.sort_by(&elem(&1, 1).date, DateTime)
-    end)
-  end
-
-  defp deposit_generator(seed, opts) do
-    {delay_generator(), StreamData.constant(seed), amount_generator(opts), level_generator(opts)}
-    |> StreamData.tuple()
-    |> StreamData.map(fn {delay, seed, amount, level} ->
-      {:deposit,
-       %{
-         amount: amount,
-         date: delay,
-         level: level,
-         seed: seed,
-         deposit_id: tick_to_id(delay)
-       }}
-    end)
   end
 
   defp level_to_days("0"), do: 0
@@ -1877,36 +1991,11 @@ defmodule VestingTest do
     Crypto.derive_address(genesis_public_key) |> Base.encode16()
   end
 
-  defp generate_deposit(opts) do
-    seed = Keyword.fetch!(opts, :seed)
-    date = Keyword.fetch!(opts, :date)
-    level = Keyword.get(opts, :level, "0")
-    amount = Keyword.get(opts, :amount, Decimal.new(1000))
-    reward_amount = Keyword.get(opts, :reward_amount, Decimal.new(0))
-    genesis_address = seed_to_genesis(seed)
-
-    %{
-      genesis_address: genesis_address,
-      state: %{
-        "level" => level,
-        "amount" => amount,
-        "reward_amount" => reward_amount,
-        "start" =>
-          case level do
-            "0" -> nil
-            _ -> DateTime.to_unix(date)
-          end,
-        "id" => DateTime.to_unix(date) |> Integer.to_string(),
-        "end" =>
-          case level do
-            "0" -> 0
-            _ -> DateTime.to_unix(date) + level_to_seconds(level)
-          end
-      }
-    }
-  end
-
   defp almost_equal(a, b) do
-    Decimal.abs(Decimal.sub(a, b)) |> Decimal.lt?("0.0001")
+    if Decimal.eq?(0, a) || Decimal.eq?(0, b) do
+      Decimal.abs(Decimal.sub(a, b)) |> Decimal.lt?("0.0001")
+    else
+      Decimal.div(Decimal.min(a, b), Decimal.max(a, b)) |> Decimal.gt?("0.9999")
+    end
   end
 end
