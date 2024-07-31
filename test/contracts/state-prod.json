@@ -1,0 +1,822 @@
+{
+  "deposits": {
+    "000065ED9197B2A42733A3B013918A99978FC7B0B1D122C7CFD4C2771ACA32A9A498": [
+      {
+        "amount": 1012.34031492,
+        "end": 1753675200,
+        "id": "1722142705",
+        "level": "5",
+        "reward_amount": 0,
+        "start": 1722139200
+      }
+    ],
+    "000009FF674C87EAE7F4C98977E366BFBEA91CB2A017C9097A17058EE15A7C09B87F": [
+      {
+        "amount": 47.37426984,
+        "end": 1729962000,
+        "id": "1722189537",
+        "level": "3",
+        "reward_amount": 0,
+        "start": 1722186000
+      },
+      {
+        "amount": 47.37426983,
+        "end": 1816794000,
+        "id": "1722189498",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722186000
+      }
+    ],
+    "000092174345CF579DCA98B190387763669BC5D1A45A737F5AF17ABAF5E2B27C8DF7": [
+      {
+        "amount": 39.53442209,
+        "end": 1816542000,
+        "id": "1721934957",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1721934000
+      }
+    ],
+    "0000D6E65A30304EE9909CA661F2229408048CE7DB515CD2A9D38E63A0CBA44076AE": [
+      {
+        "amount": 0.24513861,
+        "end": 1816610400,
+        "id": "1722003018",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722002400
+      }
+    ],
+    "0000FB9D022F9A2BABE63AD726FC8038958A73F8999170CD0DE666716911B37D57CD": [
+      {
+        "amount": 51.03800725,
+        "end": 1816887600,
+        "id": "1722279880",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722279600
+      }
+    ],
+    "00003BC98F60FA93EE3CF4460CAB7CE7206745F04722B7521480695429EDF731FDE2": [
+      {
+        "amount": 2988.25934822,
+        "end": 1816617600,
+        "id": "1722011226",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722009600
+      }
+    ],
+    "000044305A6A17545FCF99E6DC1D6AAD4A53519877FD44E9BD26DB054B511CAE338F": [
+      {
+        "amount": 68.88470637,
+        "end": 1816977600,
+        "id": "1721973718",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722369600
+      }
+    ],
+    "0000D3696485926B9B46FD6B532F26ADF44B2B5E1B1A6718519B8628C34D0E0487F3": [
+      {
+        "amount": 0.01,
+        "end": 0,
+        "id": "1721929501",
+        "level": "0",
+        "reward_amount": 0,
+        "start": null
+      },
+      {
+        "amount": 0.01,
+        "end": 1784998800,
+        "id": "1721929424",
+        "level": "6",
+        "reward_amount": 0,
+        "start": 1721926800
+      },
+      {
+        "amount": 0.01,
+        "end": 1724518800,
+        "id": "1721929367",
+        "level": "2",
+        "reward_amount": 0,
+        "start": 1721926800
+      },
+      {
+        "amount": 0.01,
+        "end": 1722531600,
+        "id": "1721929342",
+        "level": "1",
+        "reward_amount": 0,
+        "start": 1721926800
+      },
+      {
+        "amount": 0.01,
+        "end": 1729702800,
+        "id": "1721929395",
+        "level": "3",
+        "reward_amount": 0,
+        "start": 1721926800
+      }
+    ],
+    "0000EBFE35D4B9964DC41D0AC22764B67407F20F9B309E26E1D1487AF35F6755A6AD": [
+      {
+        "amount": 67.67810588,
+        "end": 1724612400,
+        "id": "1722020752",
+        "level": "2",
+        "reward_amount": 0,
+        "start": 1722020400
+      },
+      {
+        "amount": 40.0,
+        "end": 1816628400,
+        "id": "1722020474",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722020400
+      },
+      {
+        "amount": 20.0,
+        "end": 1816628400,
+        "id": "1722020533",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722020400
+      },
+      {
+        "amount": 60.0,
+        "end": 1729796400,
+        "id": "1722020692",
+        "level": "3",
+        "reward_amount": 0,
+        "start": 1722020400
+      }
+    ],
+    "0000F3C03F61A33CB9E95774AF19D956542D3284F90113A3E5837274CA9D258E4FA5": [
+      {
+        "amount": 45.0,
+        "end": 1816844400,
+        "id": "1721977068",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722236400
+      },
+      {
+        "amount": 30.0,
+        "end": 1816581600,
+        "id": "1721976242",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1721973600
+      },
+      {
+        "amount": 41.75002557,
+        "end": 1753509600,
+        "id": "1721977125",
+        "level": "5",
+        "reward_amount": 0,
+        "start": 1721973600
+      }
+    ],
+    "000099158E2C0FC1E717A1A8FCE1752EF366E20EAAA4CE9F38BAE864C13A32EAC9E6": [
+      {
+        "amount": 10.00551293,
+        "end": 1816657200,
+        "id": "1722050840",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722049200
+      }
+    ],
+    "00001C7C3F80CB5C15EB2537DF422A7EF4D55431EC05B30AED13EE5B7E1F81767487": [
+      {
+        "amount": 1.22352126,
+        "end": 1722668400,
+        "id": "1722064320",
+        "level": "1",
+        "reward_amount": 0,
+        "start": 1722063600
+      },
+      {
+        "amount": 46.16596175,
+        "end": 1724655600,
+        "id": "1722063881",
+        "level": "2",
+        "reward_amount": 0,
+        "start": 1722063600
+      }
+    ],
+    "0000D8C63858B8062159808FA02E80C64F2BB119E13F52B9C81F7B178A971402F691": [
+      {
+        "amount": 1.9771422,
+        "end": 1816542000,
+        "id": "1721934986",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1721934000
+      },
+      {
+        "amount": 26.32529758,
+        "end": 1737486000,
+        "id": "1721934053",
+        "level": "4",
+        "reward_amount": 0,
+        "start": 1721934000
+      }
+    ],
+    "000001F572D6467EDC154E09FA0B58BF5D7DC9D41EA0315C43610EF1406320934401": [
+      {
+        "amount": 1329.13816876,
+        "end": 0,
+        "id": "1721975702",
+        "level": "0",
+        "reward_amount": 0,
+        "start": null
+      }
+    ],
+    "00001E3A03626544B66D236F259AF26A6BDA73EBF6C3EFE84DB351A57BEEA776F338": [
+      {
+        "amount": 61.98573547,
+        "end": 1816862400,
+        "id": "1722256545",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722254400
+      }
+    ],
+    "00007633A19FA04D0AEB498A13F0036F4A57B6B8D51A482B21856E2FEEA2062D2E1B": [
+      {
+        "amount": 105.01724955,
+        "end": 1724770800,
+        "id": "1722179896",
+        "level": "2",
+        "reward_amount": 0,
+        "start": 1722178800
+      }
+    ],
+    "00001433FCDCB6526284D15595BA9D1646F6A053525C76BCDC8FBA7AAB6C10128FE5": [
+      {
+        "amount": 321.79211689,
+        "end": 1816581600,
+        "id": "1721974280",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1721973600
+      }
+    ],
+    "000006FBF6B819682713C55101B6E40FD44EE4CB6FCAC79DECC9BA7937FA03B4105D": [
+      {
+        "amount": 107.25019302,
+        "end": 1785002400,
+        "id": "1721932444",
+        "level": "6",
+        "reward_amount": 0,
+        "start": 1721930400
+      }
+    ],
+    "0000CBA94C234B9812CADD90F969CE6283D1A9CA67646B0A1F7CDED665AE5EAF738E": [
+      {
+        "amount": 0.1,
+        "end": 1816588800,
+        "id": "1721981565",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1721980800
+      }
+    ],
+    "00008DF280685C32B0693F69FC22C5122E1C54A9DFFEF88CE00A8828C72B4459C2F6": [
+      {
+        "amount": 47.94319205,
+        "end": 1729713600,
+        "id": "1721938117",
+        "level": "3",
+        "reward_amount": 0,
+        "start": 1721937600
+      }
+    ],
+    "00001D52DD87EE906E25919F74B607790D87D17723EC9CA2B19224739708782A1D23": [
+      {
+        "amount": 2.96915153,
+        "end": 1724522400,
+        "id": "1721932389",
+        "level": "2",
+        "reward_amount": 0,
+        "start": 1721930400
+      }
+    ],
+    "000075EF1174A535403DF88EE3A27807B596539F09C6F63033A00A38F4E1B811AE1F": [
+      {
+        "amount": 1.81496057,
+        "end": 1816855200,
+        "id": "1722249973",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722247200
+      }
+    ],
+    "0000D7F7B94DD148DCD31B25C51647090A34F2210EF612BF9C0988EA2A3C3B7B9712": [
+      {
+        "amount": 604.03017627,
+        "end": 1816959600,
+        "id": "1722353473",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722351600
+      }
+    ],
+    "00006D17EB8A194974555425952659CBD0F2C969CE33C0DE0EC890794FAAC5AE6A94": [
+      {
+        "amount": 131.01401512,
+        "end": 1785168000,
+        "id": "1722096944",
+        "level": "6",
+        "reward_amount": 0,
+        "start": 1722096000
+      }
+    ],
+    "0000DC7461F3C3EEDB63A9FEA48F458107A31866B401AF7B4BDDB8F1613CC7127F94": [
+      {
+        "amount": 25.32639252,
+        "end": 1816704000,
+        "id": "1722096427",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722096000
+      },
+      {
+        "amount": 20.0,
+        "end": 1729868400,
+        "id": "1722095578",
+        "level": "3",
+        "reward_amount": 0,
+        "start": 1722092400
+      },
+      {
+        "amount": 174.29235148,
+        "end": 1816538400,
+        "id": "1721932760",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1721930400
+      },
+      {
+        "amount": 75.55517261,
+        "end": 1816700400,
+        "id": "1722095617",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722092400
+      }
+    ],
+    "0000671A0C8F7435F2CCFD6CAD5483AB34B2C51E4F78DCF5F82788A8B9259C2484D2": [
+      {
+        "amount": 212.99553293,
+        "end": 1724594400,
+        "id": "1722004019",
+        "level": "2",
+        "reward_amount": 0,
+        "start": 1722002400
+      },
+      {
+        "amount": 212.99553293,
+        "end": 1737554400,
+        "id": "1722003953",
+        "level": "4",
+        "reward_amount": 0,
+        "start": 1722002400
+      }
+    ],
+    "0000FF3CF6D72B285283A3934D2E36A62AAB56E1BCC27082919B29E6A2831F799812": [
+      {
+        "amount": 71.9275237,
+        "end": 1816848000,
+        "id": "1722242554",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722240000
+      }
+    ],
+    "0000FB28E1A3B78D078B674B4E3A4DBEB4C4543FF2B54B6D1841A6FCAB2DE1C0936D": [
+      {
+        "amount": 59.82154437,
+        "end": 1737576000,
+        "id": "1722024930",
+        "level": "4",
+        "reward_amount": 0,
+        "start": 1722024000
+      }
+    ],
+    "0000BB806DC0F952A529897ADD7504A4EF6F3DF0ADD721448CCFC44177759AD4607E": [
+      {
+        "amount": 300.31032189,
+        "end": 1816686000,
+        "id": "1722080419",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722078000
+      },
+      {
+        "amount": 372.0,
+        "end": 1753614000,
+        "id": "1722080230",
+        "level": "5",
+        "reward_amount": 0,
+        "start": 1722078000
+      },
+      {
+        "amount": 300.0,
+        "end": 1785150000,
+        "id": "1722080321",
+        "level": "6",
+        "reward_amount": 0,
+        "start": 1722078000
+      },
+      {
+        "amount": 62.02815161,
+        "end": 1737630000,
+        "id": "1722080782",
+        "level": "4",
+        "reward_amount": 0,
+        "start": 1722078000
+      }
+    ],
+    "00009E5EE80B7C5103AA4DB54611751B3E86D29BCC69561F86B44337FC92078B85B2": [
+      {
+        "amount": 6.66048935,
+        "end": 1816678800,
+        "id": "1722071160",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722070800
+      }
+    ],
+    "0000E70A43E0EB702B53D4879273C38A7C3CE5FCA753B21F59194BC5A32A81619FFC": [
+      {
+        "amount": 3.43620376,
+        "end": 1753560000,
+        "id": "1722026455",
+        "level": "5",
+        "reward_amount": 0,
+        "start": 1722024000
+      }
+    ],
+    "0000E8CC3360749967B5E155FCC354D4196DF18BA66673CF3806CDCEEB5B0CDA130C": [
+      {
+        "amount": 0.19591836,
+        "end": 1816581600,
+        "id": "1721977192",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1721973600
+      }
+    ],
+    "00007F8DEF6ECCA96503E21C8F5B90A13CC5EF1BEB236952C55F4727B3E93E41CCF8": [
+      {
+        "amount": 12.5209424,
+        "end": 1737493200,
+        "id": "1721942574",
+        "level": "4",
+        "reward_amount": 0,
+        "start": 1721941200
+      },
+      {
+        "amount": 25.0,
+        "end": 1724533200,
+        "id": "1721942502",
+        "level": "2",
+        "reward_amount": 0,
+        "start": 1721941200
+      },
+      {
+        "amount": 150.04188478,
+        "end": 1729710000,
+        "id": "1721934998",
+        "level": "3",
+        "reward_amount": 0,
+        "start": 1721934000
+      },
+      {
+        "amount": 185.0,
+        "end": 1816542000,
+        "id": "1721934872",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1721934000
+      },
+      {
+        "amount": 50.0,
+        "end": 1785013200,
+        "id": "1721942343",
+        "level": "6",
+        "reward_amount": 0,
+        "start": 1721941200
+      },
+      {
+        "amount": 50.0,
+        "end": 1722546000,
+        "id": "1721942427",
+        "level": "1",
+        "reward_amount": 0,
+        "start": 1721941200
+      },
+      {
+        "amount": 12.52094239,
+        "end": 1729717200,
+        "id": "1721942544",
+        "level": "3",
+        "reward_amount": 0,
+        "start": 1721941200
+      }
+    ],
+    "0000FAE37FC2D817C6865945AEE9A41AF95E058C1C8C64C58D15F038372961E7ADF1": [
+      {
+        "amount": 125.6663019,
+        "end": 1730037600,
+        "id": "1722262624",
+        "level": "3",
+        "reward_amount": 0,
+        "start": 1722261600
+      }
+    ],
+    "0000FF978269EAB73B174410CF09E346A5947B1DFFEE59CF3074040913C14056D9F6": [
+      {
+        "amount": 1.97280053,
+        "end": 1729702800,
+        "id": "1721929526",
+        "level": "3",
+        "reward_amount": 0,
+        "start": 1721926800
+      }
+    ],
+    "00008330CD9373E57D9E870E2C967704CF3E79E7377E8466FAA85FE9A3461519DDE9": [
+      {
+        "amount": 40.81427052,
+        "end": 1753736400,
+        "id": "1722202601",
+        "level": "5",
+        "reward_amount": 0,
+        "start": 1722200400
+      },
+      {
+        "amount": 20.0,
+        "end": 1753704000,
+        "id": "1722171304",
+        "level": "5",
+        "reward_amount": 0,
+        "start": 1722168000
+      },
+      {
+        "amount": 60.0,
+        "end": 1737752400,
+        "id": "1722202561",
+        "level": "4",
+        "reward_amount": 0,
+        "start": 1722200400
+      }
+    ],
+    "000075841943354A1464AB072DA34D74F6341FAF821245C7FA06FE2F5F737C6070DB": [
+      {
+        "amount": 1.0e-5,
+        "end": 0,
+        "id": "1721929506",
+        "level": "0",
+        "reward_amount": 0,
+        "start": null
+      },
+      {
+        "amount": 1.0e-5,
+        "end": 1753462800,
+        "id": "1721929358",
+        "level": "5",
+        "reward_amount": 0,
+        "start": 1721926800
+      },
+      {
+        "amount": 1.0e-5,
+        "end": 1816534800,
+        "id": "1721929299",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1721926800
+      },
+      {
+        "amount": 1.0e-5,
+        "end": 1816534800,
+        "id": "1721929225",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1721926800
+      },
+      {
+        "amount": 1.0e-5,
+        "end": 1737478800,
+        "id": "1721929396",
+        "level": "4",
+        "reward_amount": 0,
+        "start": 1721926800
+      }
+    ],
+    "0000B0BE24E8884C4D245E8F6EDD9A52199ADC4E08CC99951462DD8578921F139DE6": [
+      {
+        "amount": 8.86339504,
+        "end": 1737482400,
+        "id": "1721933039",
+        "level": "4",
+        "reward_amount": 0,
+        "start": 1721930400
+      }
+    ],
+    "00007FA07F4C3672640E3FD681E0FAE3C80863DD7908C1F81922E5AFD0587933703A": [
+      {
+        "amount": 3.26021228,
+        "end": 1753509600,
+        "id": "1721976509",
+        "level": "5",
+        "reward_amount": 0,
+        "start": 1721973600
+      },
+      {
+        "amount": 0.44083593,
+        "end": 1724565600,
+        "id": "1721976734",
+        "level": "2",
+        "reward_amount": 0,
+        "start": 1721973600
+      }
+    ],
+    "000032DC502B02DEC57A8E5C2246255DA7C246BA71AB9E0D360FCBC9B4DF6D00B96C": [
+      {
+        "amount": 75.78370887,
+        "end": 1816542000,
+        "id": "1721935026",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1721934000
+      }
+    ],
+    "0000F1FA618295609C88112355B27B6408B4516FADBE52F1F5055773EF0D21481709": [
+      {
+        "amount": 400.61776249,
+        "end": 0,
+        "id": "1722370762",
+        "level": "0",
+        "reward_amount": 0,
+        "start": null
+      },
+      {
+        "amount": 100.0,
+        "end": 1816549200,
+        "id": "1721941422",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1721941200
+      },
+      {
+        "amount": 132.0,
+        "end": 1785013200,
+        "id": "1721941249",
+        "level": "6",
+        "reward_amount": 0,
+        "start": 1721941200
+      }
+    ],
+    "0000092A47748F78775B696FC9376E24AF2927B73E1E4B8D0A1ADFCEA1367B4CB509": [
+      {
+        "amount": 1.01595724,
+        "end": 1816959600,
+        "id": "1722354784",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722351600
+      }
+    ],
+    "000032687AA8603CA859AEFB8E12CDFB6D28916B2C09E73DB3BA543F09B222A98403": [
+      {
+        "amount": 110.69792489,
+        "end": 1816876800,
+        "id": "1722269359",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722268800
+      }
+    ],
+    "0000FD163D0CAD7CF62A6239A037EDABC27AD8467AD2898F899A88C7200DE2FB657A": [
+      {
+        "amount": 74.16892683,
+        "end": 1729735200,
+        "id": "1721959925",
+        "level": "3",
+        "reward_amount": 0,
+        "start": 1721959200
+      }
+    ],
+    "0000801092626879C235480C13BFC18B9568CA51649E42C3BED6D8AC482D4B91F9C5": [
+      {
+        "amount": 3.70605259,
+        "end": 1816812000,
+        "id": "1722204811",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722204000
+      },
+      {
+        "amount": 0.36723386,
+        "end": 1816779600,
+        "id": "1722174812",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1722171600
+      }
+    ],
+    "00005B4473C5D282EBC71AF34C1E78870510C81BE8384493468500047E2B4FF9A000": [
+      {
+        "amount": 19.05256979,
+        "end": 1729940400,
+        "id": "1722165282",
+        "level": "3",
+        "reward_amount": 0,
+        "start": 1722164400
+      }
+    ],
+    "0000D80508879A4DA21AC5FEA1F984C8E260BFE13F088C1C9041417B71366E605669": [
+      {
+        "amount": 40.0,
+        "end": 1816552800,
+        "id": "1721946923",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1721944800
+      },
+      {
+        "amount": 8.22453894,
+        "end": 1753480800,
+        "id": "1721946823",
+        "level": "5",
+        "reward_amount": 0,
+        "start": 1721944800
+      },
+      {
+        "amount": 10.0,
+        "end": 1785016800,
+        "id": "1721946894",
+        "level": "6",
+        "reward_amount": 0,
+        "start": 1721944800
+      }
+    ],
+    "00004D2EF8BD21C17E05EF99F64446E28D8C70B5B3B3BBDB0B92A728CDA363AD1805": [
+      {
+        "amount": 0.67011237,
+        "end": 1724522400,
+        "id": "1721933831",
+        "level": "2",
+        "reward_amount": 0,
+        "start": 1721930400
+      },
+      {
+        "amount": 2.0,
+        "end": 1816538400,
+        "id": "1721933667",
+        "level": "7",
+        "reward_amount": 0,
+        "start": 1721930400
+      }
+    ],
+    "0000F9EB9BE130704D0955D4AA1646357D22F0ADE0CCBEA3443F4A3A632729BAA588": [
+      {
+        "amount": 620.65359476,
+        "end": 1729706400,
+        "id": "1721932806",
+        "level": "3",
+        "reward_amount": 0,
+        "start": 1721930400
+      }
+    ],
+    "0000FB9C2BC25B3A67E1CE324F6E3CE81F6FFD596F31358E85BB31BECCAC61F08FF7": [
+      {
+        "amount": 50.12595538,
+        "end": 1724522400,
+        "id": "1721930366",
+        "level": "2",
+        "reward_amount": 0,
+        "start": 1721930400
+      }
+    ]
+  },
+  "last_calculation_timestamp": 1722513600,
+  "lp_tokens_deposited": 11651.01211282,
+  "lp_tokens_deposited_by_level": {
+    "0": 1729.76594125,
+    "1": 51.23352126,
+    "2": 511.07290532,
+    "3": 1179.40448287,
+    "4": 442.55487393,
+    "5": 1501.82557599,
+    "6": 730.27420814,
+    "7": 5504.88060406
+  },
+  "rewards_distributed": 0,
+  "rewards_reserved": 0
+}

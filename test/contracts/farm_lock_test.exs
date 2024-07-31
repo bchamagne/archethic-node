@@ -18,7 +18,7 @@ defmodule VestingTest do
   @initial_balance @reward_year_1 + @reward_year_2 + @reward_year_3 + @reward_year_4
   @seconds_in_day 86400
   @round_now_to 3600
-  @start_date ~U[2024-07-17T00:00:00Z]
+  @start_date ~U[2024-08-01T12:00:00Z]
   @end_date @start_date |> DateTime.add(4 * 365 * @seconds_in_day)
 
   setup do
@@ -1561,14 +1561,14 @@ defmodule VestingTest do
     end
   end
 
-  describe "Benchmark" do
+  describe "Benchmark mainnet" do
     setup %{contract: contract} do
       state =
-        "/Users/bastien/Documents/archethic-node/test/contracts/state.json"
+        "/Users/bastien/Documents/archethic-node/test/contracts/state-prod.json"
         |> File.read!()
         |> Jason.decode!(floats: :decimals)
 
-      contract = run_actions([], contract, state, Decimal.new("87375.46577807"))
+      contract = run_actions([], contract, state, Decimal.new("87500000.00555718"))
 
       %{contract: contract}
     end
@@ -1580,8 +1580,8 @@ defmodule VestingTest do
       call_function(
         contract,
         "get_user_infos",
-        ["0000B48A73C949BD7CC364188DD37DACF50498D81525EF98B38EC606617B43FFDCEC"],
-        ~U[2024-07-24T07:00:00Z]
+        ["0000FB9C2BC25B3A67E1CE324F6E3CE81F6FFD596F31358E85BB31BECCAC61F08FF7"],
+        ~U[2024-08-01T13:00:00Z]
       )
 
       IO.puts("#{System.monotonic_time(:millisecond) - start}ms get_user_infos")
@@ -1596,7 +1596,7 @@ defmodule VestingTest do
         contract,
         "get_farm_infos",
         [],
-        ~U[2024-07-24T07:00:00Z]
+        ~U[2024-08-01T13:00:00Z]
       )
 
       IO.puts("#{System.monotonic_time(:millisecond) - start}ms get_farm_infos")
@@ -1608,12 +1608,37 @@ defmodule VestingTest do
       start = System.monotonic_time(:millisecond)
 
       actions = [
-        {:calculate, %{date: ~U[2024-07-23T21:00:00Z]}}
+        {:calculate, %{date: ~U[2024-08-01T13:00:00Z]}}
       ]
 
       _ = run_actions(actions, contract, contract.state, contract.uco_balance)
 
       IO.puts("#{System.monotonic_time(:millisecond) - start}ms calculate_rewards")
+
+      assert true
+    end
+  end
+
+  describe "Benchmark perf" do
+    setup %{contract: contract} do
+      state = generate_state(6000)
+      contract = run_actions([], contract, state, Decimal.new("87500000"))
+
+      %{contract: contract}
+    end
+
+    @tag :benchmark
+    test "calculate_rewards", %{contract: contract} do
+      start = System.monotonic_time(:millisecond)
+
+      actions = [
+        {:calculate, %{date: ~U[2024-08-01T13:00:00Z]}}
+      ]
+
+      _ = run_actions(actions, contract, contract.state, contract.uco_balance)
+
+      IO.puts("#{System.monotonic_time(:millisecond) - start}ms calculate_rewards")
+
       assert true
     end
   end
@@ -2018,5 +2043,43 @@ defmodule VestingTest do
     else
       Decimal.div(Decimal.min(a, b), Decimal.max(a, b)) |> Decimal.gt?("0.9999")
     end
+  end
+
+  # the state is bogus but it doesnt matter for benchmark
+  def generate_state(count) do
+    deposits =
+      Enum.reduce(1..count, %{}, fn _i, acc ->
+        Map.put(acc, Base.encode16(<<0::8, 0::8, :crypto.strong_rand_bytes(32)::binary>>), [
+          %{
+            "level" => Enum.random(["0", "1", "2", "3", "4", "5", "6", "7"]),
+            "amount" => Decimal.new(1000),
+            "reward_amount" => 0,
+            "start" => n_ticks_from_start(0) |> DateTime.to_unix(),
+            "id" => n_ticks_from_start(0) |> DateTime.to_unix() |> Integer.to_string(),
+            "end" => n_ticks_from_start(1460 * 24) |> DateTime.to_unix()
+          }
+        ])
+      end)
+
+    {lp_tokens_deposited, lp_tokens_deposited_by_level} =
+      Enum.reduce(
+        deposits |> Map.values() |> List.flatten(),
+        {0, %{"0" => 0, "1" => 0, "2" => 0, "3" => 0, "4" => 0, "5" => 0, "6" => 0, "7" => 0}},
+        fn deposit, {total_acc, grouped_acc} ->
+          {
+            Decimal.add(total_acc, deposit["amount"]),
+            Map.update!(grouped_acc, deposit["level"], &Decimal.add(&1, deposit["amount"]))
+          }
+        end
+      )
+
+    %{
+      "last_calculation_timestamp" => n_ticks_from_start(0) |> DateTime.to_unix(),
+      "deposits" => deposits,
+      "rewards_reserved" => 0,
+      "rewards_distributed" => 0,
+      "lp_tokens_deposited" => lp_tokens_deposited,
+      "lp_tokens_deposited_by_level" => lp_tokens_deposited_by_level
+    }
   end
 end
