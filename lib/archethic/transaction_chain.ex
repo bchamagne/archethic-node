@@ -847,12 +847,37 @@ defmodule Archethic.TransactionChain do
               end
           end
 
+        repair_fun = fn
+          nil, _results_by_node ->
+            :ok
+
+          %GenesisAddress{address: ^address}, _results_by_node ->
+            :ok
+
+          %GenesisAddress{address: genesis_address}, results_by_node ->
+            results_by_node
+            |> Enum.reduce([], fn
+              {node_public_key, %GenesisAddress{address: ^address}}, acc ->
+                [node_public_key | acc]
+
+              _, acc ->
+                acc
+            end)
+            |> P2P.get_nodes_info()
+            |> P2P.broadcast_message(%ShardRepair{
+              genesis_address: genesis_address,
+              storage_address: address,
+              io_addresses: []
+            })
+        end
+
         case P2P.quorum_read(
                nodes,
                %GetGenesisAddress{address: address},
                conflict_resolver: conflict_resolver,
                timeout: timeout,
-               acceptance_resolver: acceptance_resolver
+               acceptance_resolver: acceptance_resolver,
+               repair_fun: repair_fun
              ) do
           {:ok, %GenesisAddress{address: genesis_address}} ->
             {:ok, genesis_address}
