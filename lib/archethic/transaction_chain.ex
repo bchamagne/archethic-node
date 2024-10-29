@@ -43,7 +43,8 @@ defmodule Archethic.TransactionChain do
     TransactionSummaryMessage,
     UnspentOutputList,
     GetFirstTransactionAddress,
-    FirstTransactionAddress
+    FirstTransactionAddress,
+    ShardRepair
   }
 
   alias __MODULE__.MemTables.KOLedger
@@ -1138,8 +1139,33 @@ defmodule Archethic.TransactionChain do
         end
       end
 
+      repair_fun = fn
+        nil, _results_by_node ->
+          :ok
+
+        %NotFound{}, _results_by_node ->
+          :ok
+
+        %TransactionSummaryMessage{
+          transaction_summary: %TransactionSummary{genesis_address: genesis_address}
+        },
+        results_by_node ->
+          results_by_node
+          |> Enum.reduce([], fn
+            {node_public_key, %NotFound{}}, acc -> [node_public_key | acc]
+            _, acc -> acc
+          end)
+          |> P2P.get_nodes_info()
+          |> P2P.broadcast_message(%ShardRepair{
+            genesis_address: genesis_address,
+            storage_address: address,
+            io_addresses: []
+          })
+      end
+
       case P2P.quorum_read(nodes, %GetTransactionSummary{address: address},
-             conflict_resolver: conflict_resolver
+             conflict_resolver: conflict_resolver,
+             repair_fun: repair_fun
            ) do
         {:ok,
          %TransactionSummaryMessage{transaction_summary: %TransactionSummary{address: ^address}}} ->
